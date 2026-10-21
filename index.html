@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<!-- 注意：請用本機伺服器開啟（例如 Cursor 的 Live Server 擴充功能），不要直接雙擊 HTML 檔，否則瀏覽器會封鎖從 file:// 載入 .glb 模型。 -->
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>素樞 SKELIO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500&family=Noto+Serif+TC:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<style>
+  :root{ --ink:#1c1b18; --paper:#f6f5f2; }
+  *{ margin:0; padding:0; box-sizing:border-box; }
+  html,body{ height:100%; background:var(--paper); color:var(--ink); overflow:hidden; }
+  body{ font-family:'Noto Serif TC', serif; }
+  canvas{ display:block; cursor:pointer; }
+  body.inside canvas{ cursor:grab; }
+  body.inside.dragging canvas{ cursor:grabbing; }
+  .mark{
+    position:fixed; top:28px; left:36px; z-index:2;
+    font-family:'Cinzel', serif; font-size:11px; letter-spacing:.32em;
+    opacity:.45; pointer-events:none;
+  }
+  .open{
+    position:fixed; left:50%; bottom:7vh; transform:translateX(-50%);
+    z-index:2; border:0; background:transparent; color:var(--ink);
+    font-family:'Cinzel', serif; font-size:12px; letter-spacing:.42em;
+    cursor:pointer; opacity:0; pointer-events:none;
+    transition:opacity .6s ease;
+  }
+  .open.ready{ opacity:.72; pointer-events:auto; }
+  .open span{
+    display:block; width:1px; height:36px; margin:14px auto 0; background:var(--ink); opacity:.35;
+    position:relative; overflow:hidden;
+  }
+  .open span::after{
+    content:''; position:absolute; left:0; top:-100%; width:100%; height:100%;
+    background:var(--ink); animation:drip 1.8s ease-in-out infinite;
+  }
+  @keyframes drip{ 0%{ top:-100%; } 70%{ top:100%; } 100%{ top:100%; } }
+  .status{
+    position:fixed; left:36px; bottom:28px; z-index:2;
+    font-family:'Cinzel', serif; font-size:10px; letter-spacing:.28em; opacity:0;
+    transition:opacity .6s ease; pointer-events:none;
+  }
+  .status.on{ opacity:.45; }
+  body.inside .open{ opacity:0; pointer-events:none; transition:opacity .6s ease; }
+  @media (prefers-reduced-motion: reduce){
+    .open span::after{ animation:none; }
+  }
+</style>
+</head>
+<body>
+<div class="mark">SKELIO</div>
+<button class="open" id="open" type="button">OPEN<span></span></button>
+<div class="status" id="status"></div>
+<script src="specimens.js"></script>
+<script>
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const beetles = SKELIO.tank;
+const perches = [
+  { x:-0.30, y:0.74, z:-0.18, rx:0.55, ry:0.4, rz:0.95 },
+  { x:0.28, y:0.52, z:-0.22, rx:0.2, ry:-0.8, rz:-1.05 },
+  { x:0.02, y:0.30, z:-0.28, rx:0.85, ry:2.4, rz:0.35 }
+];
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xf6f5f2);
+const camera = new THREE.PerspectiveCamera(32, innerWidth/innerHeight, 0.05, 100);
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+const key = new THREE.DirectionalLight(0xfff8ee, 0.9);
+key.position.set(3, 6, 4);
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xe7ece4, 0.45);
+fill.position.set(-4, 2, -2);
+scene.add(fill);
+
+const loader = new THREE.GLTFLoader();
+const statusEl = document.getElementById('status');
+let boxMesh = null;
+let boxSize = new THREE.Vector3(1, 1, 1);
+let phase = 'loading';
+let enterStart = 0;
+const coverPos = new THREE.Vector3();
+const insidePos = new THREE.Vector3();
+const lookCover = new THREE.Vector3();
+const lookInside = new THREE.Vector3();
+let yaw = 0, pitch = 0, targetYaw = 0, targetPitch = 0;
+let dragging = false, lastX = 0, lastY = 0, velYaw = 0;
+
+function loadGLB(file){
+  return new Promise((resolve, reject) => {
+    loader.load('models/' + encodeURIComponent(file), resolve, undefined, reject);
+  });
+}
+
+function fitCreature(obj, target){
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  box.getSize(size);
+  box.getCenter(center);
+  obj.position.sub(center);
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+  obj.scale.setScalar(target / maxDim);
+  obj.traverse(o => { if (o.isMesh){ o.frustumCulled = false; o.castShadow = false; } });
+  const g = new THREE.Group();
+  g.add(obj);
+  return g;
+}
+
+loadGLB('生態箱.glb').then((gltf) => {
+  const obj = gltf.scene;
+  obj.traverse(o => {
+    if (!o.isMesh) return;
+    o.material.side = THREE.DoubleSide;
+    o.frustumCulled = false;
+  });
+  const bounds = new THREE.Box3().setFromObject(obj);
+  const size = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  bounds.getSize(size);
+  bounds.getCenter(center);
+  obj.position.sub(center);
+  const wrap = new THREE.Group();
+  wrap.add(obj);
+  const height = 3.6;
+  const s = height / size.y;
+  wrap.scale.setScalar(s);
+  wrap.position.y = height / 2;
+  scene.add(wrap);
+  boxMesh = wrap;
+  boxSize.set(size.x * s, height, size.z * s);
+
+  coverPos.set(boxSize.x * 0.08, boxSize.y * 0.46, boxSize.z * 3.35);
+  insidePos.set(0, boxSize.y * 0.5, boxSize.z * 0.22);
+  lookCover.set(0, boxSize.y * 0.46, 0);
+  lookInside.set(0, boxSize.y * 0.5, -boxSize.z * 0.2);
+  camera.position.copy(coverPos);
+  camera.lookAt(lookCover);
+  phase = 'cover';
+  document.getElementById('open').classList.add('ready');
+}).catch((err) => {
+  console.error('生態箱模型載入失敗', err);
+  statusEl.textContent = '載入失敗';
+  statusEl.classList.add('on');
+});
+
+function placeBeetles(){
+  const target = boxSize.y * 0.22;
+  statusEl.textContent = 'LOADING';
+  statusEl.classList.add('on');
+  return Promise.all(beetles.map((spec, i) => loadGLB(spec.model).then((gltf) => {
+    const g = fitCreature(gltf.scene, target);
+    const p = perches[i];
+    g.position.set(p.x * boxSize.x, p.y * boxSize.y, p.z * boxSize.z);
+    g.rotation.set(p.rx, p.ry, p.rz);
+    scene.add(g);
+    statusEl.textContent = 'LOADING  ' + (i + 1) + ' / ' + beetles.length;
+  }))).then(() => {
+    statusEl.textContent = 'DRAG TO LOOK';
+    setTimeout(() => statusEl.classList.remove('on'), 1600);
+  }).catch((err) => {
+    console.error('甲蟲模型載入失敗', err);
+    statusEl.textContent = '載入失敗';
+    statusEl.classList.add('on');
+  });
+}
+
+function openBox(){
+  if (phase !== 'cover') return;
+  phase = 'entering';
+  enterStart = performance.now();
+  document.body.classList.add('inside');
+  placeBeetles();
+}
+
+document.getElementById('open').addEventListener('click', openBox);
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (phase === 'cover'){ openBox(); return; }
+  if (phase !== 'inside') return;
+  dragging = true;
+  lastX = e.clientX;
+  lastY = e.clientY;
+  velYaw = 0;
+  renderer.domElement.setPointerCapture(e.pointerId);
+  document.body.classList.add('dragging');
+});
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  const dx = e.clientX - lastX;
+  const dy = e.clientY - lastY;
+  lastX = e.clientX;
+  lastY = e.clientY;
+  targetYaw -= dx * 0.005;
+  targetPitch = Math.max(-0.45, Math.min(0.45, targetPitch + dy * 0.003));
+  velYaw = -dx * 0.005;
+});
+function endDrag(){
+  dragging = false;
+  document.body.classList.remove('dragging');
+}
+renderer.domElement.addEventListener('pointerup', endDrag);
+renderer.domElement.addEventListener('pointercancel', endDrag);
+
+const camNow = new THREE.Vector3();
+const lookNow = new THREE.Vector3();
+const insideTone = new THREE.Color(0xe7e3da);
+let t0 = performance.now();
+function tick(now){
+  const t = (now - t0) / 1000;
+  if (boxMesh && phase === 'cover' && !reduce){
+    boxMesh.rotation.y = 0.42 + Math.sin(t * 0.35) * 0.06;
+  }
+  if (phase === 'entering'){
+    const u = Math.min(1, (now - enterStart) / (reduce ? 1 : 1700));
+    const e = u * u * (3 - 2 * u);
+    camNow.lerpVectors(coverPos, insidePos, e);
+    lookNow.lerpVectors(lookCover, lookInside, e);
+    camera.position.copy(camNow);
+    camera.lookAt(lookNow);
+    if (boxMesh) boxMesh.rotation.y += (0 - boxMesh.rotation.y) * 0.08;
+    scene.background.lerp(insideTone, 0.04);
+    if (u >= 1) phase = 'inside';
+  }
+  if (phase === 'inside'){
+    if (!dragging && !reduce) targetYaw += velYaw;
+    velYaw *= 0.92;
+    const k = reduce ? 1 : 0.08;
+    yaw += (targetYaw - yaw) * k;
+    pitch += (targetPitch - pitch) * k;
+    const look = lookInside.clone();
+    look.x += Math.sin(yaw) * 0.8;
+    look.y += pitch * 0.6;
+    look.z += -Math.cos(yaw) * 0.35;
+    camera.position.copy(insidePos);
+    camera.lookAt(look);
+  }
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+tick(t0);
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

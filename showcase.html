@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<!-- 注意：請用本機伺服器開啟（例如 Cursor 的 Live Server 擴充功能），不要直接雙擊 HTML 檔，否則瀏覽器會封鎖從 file:// 載入 .glb 模型。 -->
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>素樞 SKELIO — 生態缸</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600&family=Noto+Serif+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<style>
+  :root{ --stone:#e7e2d8; --ink-deep:#0c0b08; --moss:#67755c; --amber:#a9793f; }
+  *{margin:0; padding:0; box-sizing:border-box;}
+  html,body{ height:100%; background:var(--ink-deep); color:var(--stone); overflow:hidden; }
+  body{ font-family:'Noto Serif TC', serif; cursor:grab; }
+  body.dragging{ cursor:grabbing; }
+  canvas{ display:block; }
+  a{ color:inherit; text-decoration:none; }
+  @media (prefers-reduced-motion: reduce){
+    .info > *{ transition:none; }
+  }
+
+  #canvas-wrap{ position:fixed; inset:0; z-index:1; }
+  .hud{
+    position:fixed; inset:0; z-index:2; pointer-events:none;
+    display:flex; flex-direction:column; justify-content:space-between;
+    padding:4.5vw;
+  }
+  .hud a, .hud .pick{ pointer-events:auto; cursor:pointer; }
+  .top, .bottom{ display:flex; justify-content:space-between; align-items:flex-end; gap:24px; }
+  .brand, .back, .counter{
+    font-family:'Cinzel', serif; font-size:11px; letter-spacing:0.2em;
+  }
+  .back{ opacity:.65; }
+  .back:hover{ color:var(--amber); opacity:1; }
+  .info .code{ font-family:'Cinzel', serif; font-size:11px; letter-spacing:0.16em; color:var(--amber); }
+  .info .latin{ font-style:italic; color:var(--moss); margin-top:6px; font-size:clamp(14px,1.6vw,18px); }
+  .info .name{ font-weight:700; font-size:clamp(24px,3.6vw,40px); margin-top:4px; }
+  .info > *{ opacity:0; transform:translateY(10px); transition:opacity .45s ease, transform .45s ease; }
+  .info.show > *{ opacity:1; transform:none; }
+  .picks{ display:flex; flex-direction:column; gap:14px; align-items:flex-end; }
+  .pick{
+    font-family:'Noto Serif TC', serif; font-size:15px; letter-spacing:-.02em;
+    opacity:.28; background:none; border:0; color:inherit; padding:0;
+    transition:opacity .45s ease, transform .55s cubic-bezier(.22,.8,.2,1);
+  }
+  .pick.active{ opacity:1; transform:translateX(-8px); }
+
+  .hint{
+    position:fixed; bottom:4.5vw; left:50%; transform:translateX(-50%);
+    z-index:3; pointer-events:none;
+    font-family:'Cinzel', serif; font-size:10px; letter-spacing:0.28em; opacity:.45;
+    transition:opacity .8s ease;
+  }
+</style>
+</head>
+<body>
+<div id="canvas-wrap"></div>
+<div class="hud">
+  <div class="top">
+    <a class="back" href="index.html">← ATELIER</a>
+    <div class="counter" id="counter">01</div>
+  </div>
+  <div class="bottom">
+    <div class="info" id="info">
+      <div class="code" id="infoCode"></div>
+      <div class="latin" id="infoLatin"></div>
+      <div class="name" id="infoCommon"></div>
+    </div>
+    <div class="picks" id="dots"></div>
+  </div>
+</div>
+<div class="hint" id="hint"><span>LOADING</span></div>
+<script src="specimens.js"></script>
+<script>
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const specimens = SKELIO.tank;
+const N = specimens.length;
+
+const dotsEl = document.getElementById('dots');
+specimens.forEach((s, i) => {
+  const b = document.createElement('button');
+  b.className = 'pick' + (i===0 ? ' active' : '');
+  b.type = 'button';
+  b.textContent = s.name;
+  b.addEventListener('click', () => focusIndex(i));
+  dotsEl.appendChild(b);
+});
+const dotEls = [...dotsEl.children];
+
+function updateHUD(i){
+  const s = specimens[i];
+  document.getElementById('counter').textContent = String(i+1).padStart(2,'0') + ' / ' + String(N).padStart(2,'0');
+  dotEls.forEach((d,k) => d.classList.toggle('active', k===i));
+  const info = document.getElementById('info');
+  info.classList.remove('show');
+  requestAnimationFrame(() => {
+    document.getElementById('infoCode').textContent = '#' + s.code;
+    document.getElementById('infoLatin').textContent = s.latin;
+    document.getElementById('infoCommon').textContent = s.name;
+    requestAnimationFrame(() => info.classList.add('show'));
+  });
+}
+updateHUD(0);
+
+const wrap = document.getElementById('canvas-wrap');
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x0c0b08, 0.045);
+const camera = new THREE.PerspectiveCamera(48, innerWidth/innerHeight, 0.1, 80);
+camera.position.set(0, 1.4, 11);
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.setClearColor(0x0c0b08, 1);
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+wrap.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xb7c4a8, 0.35));
+const key = new THREE.DirectionalLight(0xfff1d2, 0.85);
+key.position.set(4, 8, 6);
+scene.add(key);
+const fill = new THREE.PointLight(0x7d8a68, 0.55, 28);
+fill.position.set(-3, 2, 2);
+scene.add(fill);
+const rim = new THREE.PointLight(0xffe3b0, 0.7, 18);
+camera.add(rim);
+rim.position.set(0.4, 0.2, 1);
+scene.add(camera);
+
+function punchKey(image){
+  const c = document.createElement('canvas');
+  c.width = image.width;
+  c.height = image.height;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(image, 0, 0);
+  const id = ctx.getImageData(0, 0, c.width, c.height);
+  const d = id.data;
+  for (let i = 0; i < d.length; i += 4){
+    const r = d[i], g = d[i+1], b = d[i+2];
+    if (r < 22 && g < 22 && b < 22) d[i+3] = 0;
+    else if (r > 214 && g > 214 && b > 214) d[i+3] = 0;
+  }
+  ctx.putImageData(id, 0, 0);
+  return c;
+}
+
+const texLoader = new THREE.TextureLoader();
+function loadTexture(url){
+  return new Promise((resolve, reject) => {
+    texLoader.load(url, (tex) => {
+      tex.encoding = THREE.sRGBEncoding;
+      tex.anisotropy = 8;
+      try {
+        const canvas = punchKey(tex.image);
+        const t = new THREE.CanvasTexture(canvas);
+        t.encoding = THREE.sRGBEncoding;
+        t.anisotropy = 8;
+        resolve(t);
+      } catch (err) {
+        resolve(tex);
+      }
+    }, undefined, reject);
+  });
+}
+
+const ground = new THREE.Mesh(
+  new THREE.CircleGeometry(9.5, 64),
+  new THREE.MeshStandardMaterial({ color:0x1c2418, roughness:1 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.position.y = -2.15;
+scene.add(ground);
+
+ground.material.color.set(0x243026);
+
+function addLeaf(x, z, h, shade){
+  const mat = new THREE.MeshStandardMaterial({ color:shade, roughness:0.92 });
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.05, h, 6), mat);
+  stem.position.set(x, -2.15 + h/2, z);
+  stem.rotation.z = (Math.random()-0.5)*0.25;
+  scene.add(stem);
+  const blade = new THREE.Mesh(new THREE.SphereGeometry(0.55, 10, 8), mat);
+  blade.scale.set(0.35, 1.4, 0.18);
+  blade.position.set(x, -2.15 + h * 0.72, z);
+  blade.rotation.z = 0.4 + Math.random()*0.4;
+  scene.add(blade);
+}
+[[-4.6,-3.2,2.4,0x3a4a36],[-5.2,-1.1,1.8,0x2f3c2c],[4.8,-2.8,2.2,0x42543c],
+ [5.1,0.6,1.6,0x334332],[-3.8,3.4,2.0,0x3e513c],[3.6,3.2,1.7,0x2b3828],
+ [-1.4,-4.1,1.3,0x455744],[1.8,-3.8,1.5,0x31402f]].forEach(p => addLeaf(...p));
+
+const glass = new THREE.Mesh(
+  new THREE.BoxGeometry(14, 7.2, 11),
+  new THREE.MeshPhysicalMaterial({
+    color:0xdde8d4, transparent:true, opacity:0.07,
+    roughness:0.12, metalness:0, transmission:0.6, thickness:0.4,
+    side:THREE.DoubleSide
+  })
+);
+glass.position.y = 0.7;
+scene.add(glass);
+
+const moteGeo = new THREE.BufferGeometry();
+const moteCount = 90;
+const motePos = new Float32Array(moteCount * 3);
+for (let i = 0; i < moteCount; i++){
+  motePos[i*3] = (Math.random()-0.5)*12;
+  motePos[i*3+1] = Math.random()*5 - 1.6;
+  motePos[i*3+2] = (Math.random()-0.5)*9;
+}
+moteGeo.setAttribute('position', new THREE.BufferAttribute(motePos, 3));
+const motes = new THREE.Points(moteGeo, new THREE.PointsMaterial({
+  color:0xe7e2d8, size:0.035, transparent:true, opacity:0.35
+}));
+scene.add(motes);
+
+const groundY = -1.7;
+const poses = [
+  { x: 0.42, y: 0.55, z: 0.18 },
+  { x: 0.12, y: -0.85, z: 1.05 },
+  { x: -0.38, y: 2.35, z: -0.55 },
+];
+
+const insects = new Array(N);
+const pointer = new THREE.Vector2();
+let active = 0;
+let mode = 'inspect';
+const camPos = new THREE.Vector3(0, 0.35, 6.4);
+const camAim = new THREE.Vector3(0, -0.35, 0);
+const introFrom = new THREE.Vector3(0, 1.6, 12);
+const gltfLoader = new THREE.GLTFLoader();
+const hintSpan = document.getElementById('hint').querySelector('span');
+
+function prepareModel(obj){
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  box.getSize(size);
+  box.getCenter(center);
+  obj.position.sub(center);
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+  obj.scale.setScalar(2.8 / maxDim);
+  obj.updateMatrixWorld(true);
+  const fitted = new THREE.Box3().setFromObject(obj);
+  obj.position.y -= fitted.min.y;
+  obj.traverse(o => { if (o.isMesh) o.frustumCulled = false; });
+  const group = new THREE.Group();
+  group.add(obj);
+  return group;
+}
+
+function loadModel(spec){
+  const url = 'models/' + encodeURIComponent(spec.model);
+  return new Promise((resolve, reject) => {
+    gltfLoader.load(url, (gltf) => resolve(prepareModel(gltf.scene)), undefined, reject);
+  });
+}
+
+function seat(group){
+  group.position.set(0, 0, 0);
+  group.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(group);
+  const center = new THREE.Vector3();
+  box.getCenter(center);
+  group.position.x -= center.x;
+  group.position.z -= center.z;
+  group.position.y = groundY - box.min.y;
+  return group.position.y;
+}
+
+function ensure(i, quiet){
+  if (insects[i]) return Promise.resolve(insects[i]);
+  if (!quiet) hintSpan.textContent = 'LOADING';
+  return loadModel(specimens[i]).then(group => {
+    const pose = poses[i] || poses[0];
+    group.rotation.set(pose.x, pose.y, pose.z);
+    const restY = seat(group);
+    group.userData.index = i;
+    group.visible = i === active;
+    scene.add(group);
+    insects[i] = { mesh: group, restY, seed: i * 1.7 };
+    return insects[i];
+  });
+}
+
+function showOnly(i){
+  insects.forEach((it, k) => { if (it) it.mesh.visible = k === i; });
+}
+
+function focusIndex(i){
+  active = (i + N) % N;
+  mode = 'inspect';
+  updateHUD(active);
+  ensure(active).then(() => {
+    showOnly(active);
+    hintSpan.textContent = 'DRAG  ·  SCROLL';
+    document.getElementById('hint').style.opacity = '0.45';
+    const next = (active + 1) % N;
+    if (!insects[next]) ensure(next, true).catch(err => console.error('預載失敗', err));
+  }).catch((err) => {
+    console.error('模型載入失敗', err);
+    hintSpan.textContent = '載入失敗';
+    document.getElementById('hint').style.opacity = '0.8';
+  });
+}
+
+const hash = decodeURIComponent(location.hash.replace('#',''));
+const startIdx = Math.max(0, specimens.findIndex(s => s.code === hash));
+focusIndex(startIdx);
+
+let orbitY = 0.35, orbitX = 0.22;
+let targetY = 0.35, targetX = 0.22;
+let velY = 0, velX = 0;
+let dragging = false;
+let moved = false;
+let lastPX = 0, lastPY = 0;
+let wheelLock = 0;
+
+wrap.style.touchAction = 'none';
+wrap.addEventListener('pointerdown', (e) => {
+  dragging = true;
+  moved = false;
+  lastPX = e.clientX;
+  lastPY = e.clientY;
+  velY = 0;
+  velX = 0;
+  wrap.setPointerCapture(e.pointerId);
+  document.body.classList.add('dragging');
+});
+wrap.addEventListener('pointermove', (e) => {
+  pointer.x = (e.clientX / innerWidth) * 2 - 1;
+  pointer.y = -(e.clientY / innerHeight) * 2 + 1;
+  if (!dragging) return;
+  const dx = e.clientX - lastPX;
+  const dy = e.clientY - lastPY;
+  if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
+  lastPX = e.clientX;
+  lastPY = e.clientY;
+  targetY += dx * 0.005;
+  targetX = Math.max(-0.15, Math.min(0.7, targetX + dy * 0.003));
+  velY = dx * 0.005;
+  velX = dy * 0.003;
+});
+function endDrag(){
+  dragging = false;
+  document.body.classList.remove('dragging');
+}
+wrap.addEventListener('pointerup', endDrag);
+wrap.addEventListener('pointercancel', endDrag);
+
+window.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  if (performance.now() < wheelLock) return;
+  if (Math.abs(e.deltaY) < 12) return;
+  wheelLock = performance.now() + 700;
+  focusIndex(active + (e.deltaY > 0 ? 1 : -1));
+}, { passive:false });
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') focusIndex(active + 1);
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') focusIndex(active - 1);
+});
+
+let t0 = performance.now();
+function tick(now){
+  const t = (now - t0) / 1000;
+  if (!dragging && !reduceMotion){
+    targetY += velY;
+    targetX = Math.max(-0.15, Math.min(0.7, targetX + velX));
+    velY *= 0.92;
+    velX *= 0.92;
+  }
+  const follow = reduceMotion ? 1 : 0.08;
+  orbitY += (targetY - orbitY) * follow;
+  orbitX += (targetX - orbitX) * follow;
+
+  const current = insects[active];
+  if (current){
+    current.mesh.position.y = current.restY + Math.sin(t * 0.55 + current.seed) * 0.012;
+  }
+
+  const moteArr = motes.geometry.attributes.position.array;
+  for (let i = 1; i < moteArr.length; i += 3){
+    moteArr[i] += 0.004;
+    if (moteArr[i] > 3.8) moteArr[i] = -1.8;
+  }
+  motes.geometry.attributes.position.needsUpdate = true;
+
+  const dist = 5.4;
+  camPos.set(Math.sin(orbitY) * dist, 0.15 + orbitX * 1.6, Math.cos(orbitY) * dist);
+  camAim.set(0, -0.45, 0);
+
+  const intro = reduceMotion ? 1 : Math.min(1, t / 2.4);
+  const eased = 1 - Math.pow(1-intro, 3);
+  camera.position.lerpVectors(introFrom, camPos, eased);
+  const look = new THREE.Vector3().lerpVectors(new THREE.Vector3(0,0.2,0), camAim, eased);
+  camera.lookAt(look);
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
