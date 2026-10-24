@@ -1,146 +1,123 @@
 # 素樞 SKELIO — Website Architecture & Design System
-**Minimalist Futuristic Specimen Experience (Apple Product-Page Inspired)**
+
+**Minimalist Futuristic Specimen Gallery (Apple Product-Page Inspired)**
 
 ---
 
-## 1. Overall Site Structure & Page Flow
+## 1. Site Structure & Page Flow
 
-SKELIO transforms from two disconnected views (`index.html` light paper cover and `showcase.html` dark forest HUD) into a single cohesive, Apple-inspired spatial product narrative (`apple.com/airpods-pro` / `apple.com/vision-pro` aesthetic). The site treats each beetle specimen and the terrarium (生態箱) as precision-engineered natural artifacts presented on an ultra-clean gallery stage.
+SKELIO unifies the light terrarium cover (`index.html`) and the 3D specimen viewer (`showcase.html`) into a single spatial narrative inspired by Apple product pages (`apple.com/airpods-pro`, `apple.com/vision-pro`). Each beetle specimen and the glass terrarium (`生態箱.glb`) are presented as precision-preserved natural artifacts on a high-key studio stage.
 
-### 1.1 Information Architecture & Route Map
+### 1.1 Route & Section Flow
 
 ```mermaid
 flowchart LR
-  A["1. Hero & Spatial Intro\n(index.html #hero)"] --> B["2. Terrarium Experience\n(index.html #terrarium / 生態箱)"]
-  B --> C["3. Specimen Bento Catalog\n(index.html #catalog — 23 Specimens)"]
-  C --> D["4. Interactive 3D Specimen Studio\n(showcase.html#CODE — 3D + Exploded View)"]
-  D --> E["5. Craft & Provenance\n(index.html #about — Anatomy & Habitat)"]
+  A["1. Hero Stage\n(index.html #hero)"] --> B["2. Glass Terrarium\n(index.html #terrarium)"]
+  B --> C["3. Bento Catalog\n(index.html #catalog · 23 Specimens)"]
+  C --> D["4. 3D Specimen Studio\n(showcase.html#CODE)"]
+  D --> E["5. Craft & Habitat\n(index.html #about)"]
 ```
 
-### 1.2 Page-by-Page Flow
+### 1.2 Section Architecture
 
-1. **Landing & Hero Stage (`index.html` — `#hero`)**
-   - ** Sticky Top Glass Navbar:** Translucent frosted bar (`backdrop-filter: blur(20px)`) with `SKELIO 素樞` wordmark on the left, section anchors (`Terrarium 生態箱`, `Specimens 標本圖鑑`, `Anatomy 結構`, `About 關於`) in the center, and a pill CTA (`Explore 3D 進入生態缸 → showcase.html`) on the right.
-   - **Hero Viewport (`100vh` pinned):** Full-bleed near-white spatial canvas (`#fbfbfd`) featuring the 3D `生態箱.glb` floating at center stage with studio rim lighting, flanked by oversized, high-contrast Apple-style display typography (`素樞 SKELIO` / `Nature, Precision-Preserved.`).
-
-2. **Terrarium Experience (`index.html` — `#terrarium`)**
-   - **Scroll-to-Zoom or Click-to-Enter (`OPEN`):** Scrolling down (or clicking the minimal pill button `OPEN TERRARIUM`) smoothly dollies the Three.js camera from the exterior cover pose (`coverPos`) through the glass walls into the interior (`insidePos`).
-   - **Interior Perch Inspection:** Inside the terrarium, the 3 hero tank specimens (`1000` 長頸鹿鋸鍬, `1601` 巴拉望, `HXM` 巨顎叉角鍬形蟲) sit on their perches. Floating frosted-glass callout pills (`#1000 · Prosopocoilus giraffa nishikawai`) anchor to each beetle in 3D screen space; clicking any callout transitions directly to `showcase.html#1000`.
-
-3. **Specimen Bento Catalog (`index.html` — `#catalog`)**
-   - **23-Specimen Modular Grid:** Below the 3D terrarium canvas, the page scrolls into a clean 12-column Apple Bento grid displaying all 23 specimens from `window.SKELIO.specimens` (`photos/0100.png` – `photos/2400.png`, `hexarthrius.png`).
-   - **Filter Pills:** Instant client-side filtering by family/feature (`All 全部 (23)`, `3D Interactive 3D 模型 (3)`, `Lucanidae 鍬形蟲`, `Dynastinae 兜蟲`, `Cerambycidae 天牛 & 其他`).
-   - **Card Structure:** High-key studio card (`#f5f5f7`) with specimen code badge (`#0601`), cutout/photo preview with subtle hover elevation, Chinese name (`蘇門答臘巨扁`), and italicized scientific name (`Dorcus titanus yasuokai`). Cards with `.model` display a `3D VIEW` badge and open `showcase.html#<CODE>`.
-
-4. **Interactive 3D Specimen Studio (`showcase.html#<CODE>`)**
-   - **Unified Gallery Stage:** Replaces the dark murky fog with a clean, futuristic studio environment (configurable light/dark studio toggle: **Studio Light `#f5f5f7`** default + **Obsidian Dark `#0a0a0c`** inspection mode).
-   - **HUD & Precision Controls:**
-     - **Top Bar:** `← SKELIO` back pill, specimen index counter (`01 / 03`), and mode toggles (`Orbit 環視` · `Explode 結構拆解` · `Studio Dark/Light`).
-     - **Bottom-Left Spec Sheet:** Animated typography stack with catalog code (`#1601`), binomial name (`Dorcus titanus palawanicus`), Chinese title (`巴拉望巨扁`), and key morphological tags.
-     - **Bottom-Right Switcher:** Tactile pill selector for jumping between specimens (`長頸鹿鋸鍬`, `巴拉望`, `巨顎叉角鍬形蟲`) plus a drawer trigger to browse all 23 photo specimens.
-
-5. **About / Craft & Provenance Section (`index.html` — `#about`)**
-   - **Editorial Spec Breakdown:** Two-column Apple-style specification table detailing preservation craft, 3D photogrammetry / AI reconstruction pipeline (4K/8K PBR textures, segmented anatomy), and natural habitat notes (`photos/habitat.jpg`).
+| View / Route | Role | Core Elements & User Actions |
+| :--- | :--- | :--- |
+| **1. Hero Stage**<br>`index.html#hero` | Spatial introduction | Sticky frosted-glass navbar (`SKELIO 素樞`, section links, `Explore 3D` CTA); `100vh` alabaster canvas (`#fbfbfd`) with floating `生態箱.glb`, studio rim lighting, and display headline (`素樞 SKELIO`). |
+| **2. Glass Terrarium**<br>`index.html#terrarium` | Interior habitat exploration | Clicking `OPEN` (or canvas) transitions camera from `coverPos` (`32°` FOV) into `insidePos` (`48°` FOV). Inside, the 3 `SKELIO.tank` beetles (`1000` 長頸鹿鋸鍬, `1601` 巴拉望, `HXM` 巨顎叉角鍬形蟲) rest on perches with drag-look (`yaw`/`pitch`), scroll-wheel zoom (`0.26×–1.65×`), and 2D callout pills linking to `showcase.html#CODE`. |
+| **3. Specimen Bento Catalog**<br>`index.html#catalog` | Full collection browser | 12-column Apple Bento grid presenting all 23 entries in `window.SKELIO.specimens` (`photos/0100.png`–`photos/2400.png`, `hexarthrius.png`). Instant filter pills (`All 全部`, `3D Models 3D 模型`, `Lucanidae 鍬形蟲`, `Dynastinae 兜蟲`, `Cerambycidae 天牛 & 其他`). |
+| **4. 3D Specimen Studio**<br>`showcase.html#CODE` | Close-up 3D & anatomy inspection | Studio Light (`#f5f5f7`) / Obsidian Dark (`#0a0a0c`) stage; top bar (`← SKELIO`, `01 / 03` counter, `Orbit 環視` · `Explode 結構拆解` toggles); bottom-left spec sheet (`#CODE`, Latin binomial, Chinese name); bottom-right specimen switcher. |
+| **5. Craft & Provenance**<br>`index.html#about` | Editorial specification | Two-column specification layout covering specimen preservation, 4K/8K PBR scan & segmentation workflow, and natural habitat imagery (`photos/habitat.jpg`). |
 
 ---
 
 ## 2. Visual Design System
 
-All design tokens live in a single shared stylesheet (`skelio.css`) imported by both `index.html` and `showcase.html` so both pages share one unmistakable visual language.
+All tokens live in a shared `skelio.css` imported by both `index.html` and `showcase.html`.
 
-### 2.1 Color Palette (Minimalist Futuristic)
+### 2.1 Color Palette
 
-| Token | Hex / Value | Usage |
+| Token | Value | Application |
 | :--- | :--- | :--- |
-| `--bg-primary` | `#fbfbfd` | Primary page & studio canvas background (Apple alabaster white) |
-| `--bg-elevated` | `#f5f5f7` | Bento specimen cards, secondary section surfaces |
-| `--bg-glass` | `rgba(255, 255, 255, 0.72)` | Sticky navbar, floating HUD pills, specimen callout cards (`backdrop-filter: blur(20px) saturate(180%)`) |
-| `--bg-obsidian` | `#0a0a0c` | Optional dark inspection mode in `showcase.html` & high-contrast footer |
-| `--ink-primary` | `#1d1d1f` | Primary headings, specimen Chinese names, active controls |
-| `--ink-secondary` | `#6e6e73` | Scientific Latin names, body copy, secondary labels |
-| `--ink-tertiary` | `#86868b` | Specimen codes (`#0601`), axis ticks, disabled states, hints |
-| `--accent-bio` | `#2e5a44` | Futuristic botanical emerald — active pills, 3D badges, focus rings |
-| `--accent-amber` | `#b88646` | Warm specimen amber — highlight accents, hover micro-indicators |
-| `--border-hairline` | `rgba(29, 29, 31, 0.08)` | `1px` crisp card borders, HUD dividers, grid lines |
+| `--bg-primary` | `#fbfbfd` | Primary page and default 3D studio background (Apple alabaster) |
+| `--bg-elevated` | `#f5f5f7` | Bento specimen cards and secondary content surfaces |
+| `--bg-glass` | `rgba(255, 255, 255, 0.72)` | Navbar, HUD pills, and callouts (`backdrop-filter: blur(20px) saturate(180%)`) |
+| `--bg-obsidian` | `#0a0a0c` | Dark inspection mode in `showcase.html` and footer surface |
+| `--ink-primary` | `#1d1d1f` | Primary headings, Chinese specimen names, active controls |
+| `--ink-secondary` | `#6e6e73` | Italicized Latin binomials, body copy, secondary labels |
+| `--ink-tertiary` | `#86868b` | Catalog codes (`#0601`), scale ticks, muted HUD hints |
+| `--accent-bio` | `#2e5a44` | Botanical emerald for active pills, `3D` badges, and focus rings |
+| `--accent-amber` | `#b88646` | Warm specimen amber for hover indicators and code highlights |
+| `--border-hairline` | `rgba(29, 29, 31, 0.08)` | `1px` card borders, HUD dividers, and spec table rules |
 
-### 2.2 Typography
+### 2.2 Typography Scale
 
-- **Font Stack:**
-  - **Display & English UI / Codes:** `'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif` (replaces decorative medieval `Cinzel` with clean geometric precision; optional `'JetBrains Mono'` for `#0601` catalog codes and telemetry).
-  - **Traditional Chinese Display & Editorial:** `'Noto Serif TC', 'Songti TC', serif` (retains scholarly specimen authority for Chinese names) paired with `'Noto Sans TC', 'PingFang TC', sans-serif` for UI controls and specs.
-- **Type Scale & Weight Hierarchy:**
-  - **Hero Display (`--text-hero`):** `clamp(2.75rem, 6vw, 5.25rem)`, weight `600`, letter-spacing `-0.03em`, line-height `1.06`.
-  - **Section Headline (`--text-h1`):** `clamp(2rem, 4vw, 3.25rem)`, weight `600`, letter-spacing `-0.02em`, line-height `1.12`.
-  - **Specimen Title (`--text-specimen`):** `clamp(1.5rem, 2.8vw, 2.5rem)`, weight `700` (`Noto Serif TC`), letter-spacing `-0.01em`.
-  - **Scientific Name (`--text-latin`):** `clamp(0.95rem, 1.3vw, 1.15rem)`, weight `400`, italic, color `--ink-secondary`.
-  - **Telemetry / Code Tag (`--text-mono`):** `0.75rem` (`12px`), weight `500`, uppercase, letter-spacing `0.18em`, tabular-nums (`font-variant-numeric: tabular-nums`).
+- **UI & Latin Display:** `'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif` (replaces `Cinzel` for clean technical precision; `'JetBrains Mono'` optional for `#0601` codes).
+- **Traditional Chinese Display:** `'Noto Serif TC', 'Songti TC', serif` for specimen titles, paired with `'Noto Sans TC', 'PingFang TC', sans-serif` for UI labels.
 
-### 2.3 Spacing & Layout Grid
+| Token | Size (`clamp`) | Weight | Tracking / Line Height | Usage |
+| :--- | :--- | :--- | :--- | :--- |
+| `--text-hero` | `clamp(2.75rem, 6vw, 5.25rem)` | `600` | `-0.03em` / `1.06` | Hero headline (`素樞 SKELIO`) |
+| `--text-h1` | `clamp(2rem, 4vw, 3.25rem)` | `600` | `-0.02em` / `1.12` | Section headers (`#catalog`, `#about`) |
+| `--text-specimen` | `clamp(1.5rem, 2.8vw, 2.5rem)` | `700` | `-0.01em` / `1.20` | Specimen Chinese name (`Noto Serif TC`) |
+| `--text-latin` | `clamp(0.95rem, 1.3vw, 1.15rem)` | `400` (italic) | `0em` / `1.45` | Scientific name (`Dorcus titanus yasuokai`) |
+| `--text-mono` | `0.75rem` (`12px`) | `500` | `0.18em` / `1.00` | Catalog codes (`#0601`), counters (`tabular-nums`) |
 
-- **Container & Max Width:** `max-width: 1280px` centered with responsive horizontal padding `clamp(24px, 5vw, 64px)`.
-- **Grid System:** 12-column CSS Grid (`gap: 20px` on desktop, `12px` on mobile).
-  - **Featured 3D Specimen Cards (Tank 3):** Span 4 columns each (`grid-column: span 4`) in the top row of the catalog.
-  - **Standard Specimen Cards:** Span 3 columns (`grid-column: span 3`, 4 per row on desktop; 2 per row on tablet; 1 per row on mobile).
-- **Radius & Elevation:**
-  - Cards: `border-radius: 24px`, border `1px solid var(--border-hairline)`, resting shadow `0 4px 24px rgba(0, 0, 0, 0.03)`.
-  - Floating HUD Pills: `border-radius: 999px`, padding `10px 20px`.
-- **8px Spatial Scale:** `--space-1: 4px`, `--space-2: 8px`, `--space-3: 16px`, `--space-4: 24px`, `--space-5: 32px`, `--space-6: 48px`, `--space-7: 80px`, `--space-8: 120px`.
+### 2.3 Layout Grid & Spatial Tokens
+
+- **Container:** `max-width: 1280px`, centered, horizontal padding `clamp(24px, 5vw, 64px)`.
+- **12-Column Bento Grid:** `gap: 20px` desktop / `12px` mobile.
+  - **Featured 3D Tank Specimens (`1000`, `1601`, `HXM`):** `grid-column: span 4` (3 across on desktop).
+  - **Standard Photo Specimens (20 items):** `grid-column: span 3` (4 across desktop, 2 tablet, 1 mobile).
+- **Surfaces & Radii:** Cards use `border-radius: 24px`, `1px solid var(--border-hairline)`, and resting shadow `0 4px 24px rgba(0, 0, 0, 0.03)`. Floating HUD pills use `border-radius: 999px` and `padding: 10px 20px`.
+- **8px Spacing Scale:** `--space-1: 4px`, `--space-2: 8px`, `--space-3: 16px`, `--space-4: 24px`, `--space-5: 32px`, `--space-6: 48px`, `--space-7: 80px`, `--space-8: 120px`.
 
 ---
 
 ## 3. Interaction Design
 
-### 3.1 Page Transitions & Camera Continuity
-- **Seamless Cross-Page Transition:** Clicking a specimen in `index.html` (or clicking `← SKELIO` in `showcase.html`) triggers a `350ms` frosted-glass crossfade (`document.startViewTransition` where supported, with CSS opacity fallback) and passes the specimen code via URL hash (`showcase.html#1601`).
-- **Camera Handoff:** Both pages use matching easing (`cubic-bezier(0.22, 1, 0.36, 1)` in CSS; cubic ease-out / smoothstep in Three.js) so the camera dolly-in on `index.html` (`1700ms`) and the studio intro dolly on `showcase.html` (`2400ms`) feel like one continuous lens movement.
+| Interaction | Trigger | Motion & Visual Behavior |
+| :--- | :--- | :--- |
+| **Page Transition** | Clicking a specimen card or `← SKELIO` | `350ms` crossfade (`document.startViewTransition` with opacity fallback) passing `#CODE` in the URL hash (`showcase.html#1601`). |
+| **Terrarium Entry** | `#open` click, canvas tap, or scroll scrub | `1700ms` smoothstep (`u²(3 - 2u)`) camera interpolation from `coverPos` (`32°` FOV) to `insidePos` (`48°` FOV) while background shifts from `#f6f5f2` to `#e7e3da`. |
+| **Interior Look & Zoom** | Pointer drag & scroll wheel in `phase === 'inside'` | Inertial first-person look (`lookFromEye()`, `yaw` damping `0.92`, `pitch` clamped to `[-0.35, 0.28]`) and wheel zoom scaling distance from `focus` within `[0.26, 1.65]`. |
+| **Bento Card Hover** | Pointer hover on `#catalog` card | Card lifts `translateY(-4px)` over `320ms cubic-bezier(0.22, 1, 0.36, 1)`, shadow deepens to `0 16px 40px rgba(0, 0, 0, 0.07)`, specimen photo scales to `1.035`. |
+| **Exploded View (`結構拆解`)** | Range slider (`0%–100%`) in `showcase.html` | Offsets segmented `.glb` child meshes radially from the model centroid: `part.position.lerpVectors(restPos, explodedPos, factor)`. |
+| **Loading & Fallback** | GLB fetch progress / `.catch()` error | Frosted progress pill (`Loading 1 / 3 · 長頸鹿鋸鍬`). On load failure, displays a glass notice (`載入失敗 · 請以 Live Server 開啟`) and falls back to `spec.photo`. |
 
-### 3.2 Scroll-Driven Animations
-- **Hero-to-Terrarium Scroll Scrubbing (`index.html`):**
-  - Scrolling through the first `180vh` scrubs the parameter `u ∈ [0, 1]` driving `camNow.lerpVectors(coverPos, insidePos, e)` (or users can click `OPEN` to auto-animate `u` from `0 → 1`).
-  - As `u` passes `0.75`, the 3D beetle perches fade in and 2D screen-space HUD pins (`THREE.Vector3.project(camera)`) lock onto each specimen.
-- **Section Reveal Choreography:** Bento cards and spec rows use `IntersectionObserver` to reveal with subtle vertical lift (`translateY(16px) → translateY(0)`, `opacity: 0 → 1`, staggered by `40ms`). All animations respect `@media (prefers-reduced-motion: reduce)`.
-
-### 3.3 Hover & Pointer States
-- **Bento Cards:** Hovering lifts the card by `translateY(-4px)` over `320ms cubic-bezier(0.22, 1, 0.36, 1)`, deepens shadow to `0 16px 40px rgba(0, 0, 0, 0.07)`, and scales the specimen image by `1.035`.
-- **3D Raycast Hover (`index.html` & `showcase.html`):** Moving the pointer over a 3D beetle in the terrarium highlights its floating label pill and changes the cursor to `pointer`; dragging on empty canvas uses `grab` / `grabbing`.
-- **Exploded View Slider (`showcase.html`):** When a segmented model has multiple child meshes (`group.children`), an interactive `Explode 結構拆解` range slider (`0% – 100%`) radially offsets each part along its outward normal vector from the specimen centroid (`part.position.lerpVectors(restPos, explodedPos, explodeFactor)`).
-
-### 3.4 Loading & Error States
-- **Unified Progress Pill:** Replaces the raw text `LOADING 1 / 3` with a sleek frosted pill containing a thin animated progress bar (`0% → 100%`), specimen name, and numeric counter (`Loading 1 / 3 · 長頸鹿鋸鍬`).
-- **Graceful Fallback:** If a `.glb` model fails to load (e.g., opened via `file://` or missing asset), the `.catch()` handler displays a clean glass notification pill (`模型載入失敗 · 請以 Live Server 開啟或切換至 2D 圖鑑`) and automatically displays the high-resolution specimen photo (`spec.photo`) so the page never appears broken.
+All animations respect `@media (prefers-reduced-motion: reduce)` by snapping directly to target states and disabling continuous idle motion.
 
 ---
 
-## 4. Three.js 3D Content Integration
+## 4. Three.js Content Integration
 
-### 4.1 Keeping the Existing Scene & Data Architecture Intact
-- **`specimens.js` as Single Source of Truth:** Retains `window.SKELIO.specimens` (all 23 entries, including the corrected `0601` `Dorcus titanus yasuokai`) and `window.SKELIO.tank` (`1000`, `1601`, `HXM`). Optional metadata fields (`lengthMm`, `origin`, `family`) can be appended non-destructively.
-- **`index.html` (`生態箱.glb` + 3 Tank Beetles):**
-  - Keeps the existing `loadGLB('生態箱.glb')`, `fitCreature()`, `placeBeetles()`, `perches`, and `coverPos → insidePos` interpolation logic.
-  - Wraps the Three.js canvas inside a sticky viewport container (`#terrarium-stage { position: sticky; top: 0; height: 100vh; }`) inside a `200vh` scroll track, allowing the user to scroll past the 3D stage into the 23-specimen Bento catalog below without losing WebGL context.
-  - Adds a `THREE.Raycaster` on `pointerup` (when `!moved`) so clicking any of the 3 beetles inside the terrarium navigates to `showcase.html#<code >`.
-- **`showcase.html` (3D Specimen Studio + 2D Cutout Fallback):**
-  - Keeps `prepareModel()`, `seat()`, `ensure()`, `focusIndex()`, inertial orbit (`orbitY`, `orbitX`), and `punchKey()` texture cutout helper.
-  - **Studio Lighting Upgrade:** Matches the clean Apple studio palette by setting the default background/fog to `#f5f5f7` (with a 1-click toggle to the original `#0c0b08` dark terrarium mood) and keeping the soft ground plane as a subtle shadow catcher.
-  - **23-Specimen Support:** For the 3 specimens with `.model` (`1000`, `1601`, `HXM`), `showcase.html` loads the `.glb` 3D mesh; for the remaining 20 specimens (which have `photo: 'photos/XXXX.png'`), `showcase.html` can either display their cutout plane in 3D space via the existing `loadTexture(spec.photo)` / `punchKey()` function already written in `showcase.html` (lines 133–167) or preview them in a slide-over detail modal.
+1. **`specimens.js` (Single Data Source):**
+   - Preserves `window.SKELIO.specimens` (23 specimens, including `0601` `Dorcus titanus yasuokai` and `2200` `Dorcus alcides`), `window.SKELIO.habitat`, and `window.SKELIO.tank` (`1000`, `1601`, `HXM`). Optional metadata (`lengthMm`, `origin`, `family`) can be added per entry without breaking existing consumers.
+2. **`index.html` (Glass Terrarium + Scrollable Catalog):**
+   - Retains `loadGLB('生態箱.glb')`, automatic glass-panel detection (`panelLike()` applying transparent `glassMat` with `opacity: 0.16`, `renderOrder: 2`), `fitCreature()` with `polygonOffset`, `placeBeetles()`, `lookFromEye()`, and wheel zoom.
+   - Places the WebGL canvas inside a sticky viewport stage (`#terrarium-stage { position: sticky; top: 0; height: 100vh; }`) above the `#catalog` and `#about` DOM sections so users can transition from the 3D terrarium into the 23-specimen Bento grid on a single page.
+   - Adds `THREE.Raycaster` hit-testing on perched beetles (`!moved` on `pointerup`) and 2D screen-space callout pills (`THREE.Vector3.project(camera)`) to jump to `showcase.html#CODE`.
+3. **`showcase.html` (3D Specimen Studio + 2D Cutout Fallback):**
+   - Retains `prepareModel()`, `seat()`, `ensure()`, `focusIndex()`, inertial orbit (`orbitY`, `orbitX`), and `punchKey()` background keying.
+   - Defaults to the high-key Studio Light environment (`#f5f5f7`) for visual continuity with `index.html`, with a toggle for the original dark habitat mood (`#0c0b08`).
+   - Uses `.glb` meshes for the 3 tank specimens and activates the existing `loadTexture(spec.photo)` + `punchKey()` pipeline to render 3D cutout planes for the remaining 20 photo-only specimens.
 
 ---
 
 ## 5. Prioritized Implementation Checklist
 
-### Phase 1 — Shared Design System & Visual Unification (P1 — Do First)
-- [ ] **1.1 Create `skelio.css` with shared tokens:** Extract color variables (`--bg-primary`, `--bg-glass`, `--ink-primary`, `--accent-bio`), typography rules (`Inter` + `Noto Serif TC`), frosted-glass HUD pills, and reduced-motion utilities so `index.html` and `showcase.html` look like one website.
-- [ ] **1.2 Sync `main` and `terrarium` branches:** Merge the `models/`, `photos/`, and `.gitignore` assets from `terrarium` into `main` so `main` is a complete, runnable repository.
-- [ ] **1.3 Add Top Glass Navigation Bar to both pages:** Unify the header (`SKELIO 素樞`, section links, and `← Atelier` / `Explore 3D` navigation) across `index.html` and `showcase.html`.
-- [ ] **1.4 Unify Loading & Error UI:** Upgrade `#status` in `index.html` and `#hint` in `showcase.html` into the same frosted-glass progress pill with a visual progress bar.
+### Phase 1 — Shared Design System & Branch Unification (P1)
+- [x] **1.0 Glass terrarium & scroll-wheel zoom (`terrarium` branch `0d6a82a`):** Upgraded `生態箱.glb` with `panelLike()` glass material, `32° → 48°` FOV entry, and `0.26×–1.65×` wheel zoom.
+- [ ] **1.1 Create shared `skelio.css`:** Extract color, typography (`Inter` + `Noto Serif TC`), frosted-glass pill, and reduced-motion tokens shared by `index.html` and `showcase.html`.
+- [ ] **1.2 Sync `terrarium` into `main`:** Merge `models/`, `photos/`, `.gitignore`, and the glass terrarium `index.html` from `terrarium` into `main`.
+- [ ] **1.3 Unified top glass navbar & loading pill:** Add the shared translucent header and progress-bar status pill to both pages.
 
-### Phase 2 — Apple-Style Layout & 3D-to-Page Integration (P2 — Core UX)
-- [ ] **2.1 Add the 23-Specimen Bento Catalog to `index.html`:** Convert `index.html` from `overflow: hidden` into a scroll-capable page where the 3D `生態箱.glb` stage is pinned at the top, followed by the responsive Bento grid of all 23 specimens from `SKELIO.specimens` with family filter pills.
-- [ ] **2.2 Add 3D Beetle Click-Through & Floating Callouts in `index.html`:** Project 3D perch coordinates to 2D screen-space labels (`#1000`, `#1601`, `#HXM`) once `phase === 'inside'`, and wire clicks to `showcase.html#<code>`.
-- [ ] **2.3 Activate Photo Cutout Planes in `showcase.html` for Non-GLB Specimens:** Wire the existing `loadTexture()` / `punchKey()` function in `showcase.html` so any of the 20 photo-only specimens clicked from the catalog renders cleanly on a 3D billboard card when `spec.model` is undefined.
-- [ ] **2.4 Add Studio Light / Dark Mode Toggle in `showcase.html`:** Default `showcase.html` to the high-key Apple Studio Light palette (`#f5f5f7`) for visual continuity with `index.html`, with a header toggle to switch to the dramatic dark habitat view (`#0c0b08`).
+### Phase 2 — Apple Bento Catalog & Cross-Scene Navigation (P2)
+- [ ] **2.1 Build 23-specimen Bento grid on `index.html`:** Pin the 3D terrarium stage at the top and render all 23 `SKELIO.specimens` cards below with family/3D filter pills.
+- [ ] **2.2 Add 3D beetle callout pins & click-through:** Project perch coordinates to 2D pills in `phase === 'inside'` and navigate to `showcase.html#CODE` on click.
+- [ ] **2.3 Enable 2D cutout planes in `showcase.html`:** Connect `loadTexture()` / `punchKey()` when `spec.model` is absent so all 23 specimens can be inspected in `showcase.html`.
+- [ ] **2.4 Add Studio Light / Dark theme toggle in `showcase.html`:** Default to `#f5f5f7` studio lighting with a one-click switch to `#0c0b08` dark mode.
 
-### Phase 3 — Futuristic Polish & Micro-Interactions (P3 — Next-Level Detail)
-- [ ] **3.1 Interactive Exploded View (`Explode 結構拆解`) in `showcase.html`:** Add a HUD slider that checks if a loaded `.glb` contains segmented sub-meshes (from Tripo Segmentation) and smoothly translates each part outward from its bounding-box center on scrub.
-- [ ] **3.2 Scroll-Linked Camera Dolly on `index.html`:** Allow mouse-wheel / trackpad scroll to smoothly scrub the `coverPos → insidePos` camera transition in addition to the `OPEN` button.
-- [ ] **3.3 Scale Bar & Specimen Telemetry Overlay:** Add subtle millimeter scale ticks and specimen metadata (`Origin`, `Family`, `Catalog ID`) to the `showcase.html` HUD.
+### Phase 3 — Advanced 3D Polish (P3)
+- [ ] **3.1 Exploded-view slider (`Explode 結構拆解`):** Add radial part separation in `showcase.html` for multi-part segmented `.glb` models.
+- [ ] **3.2 Scroll-scrubbed terrarium entry:** Allow vertical scroll position to scrub the `coverPos → insidePos` transition on `index.html`.
+- [ ] **3.3 Telemetry & millimeter scale overlay:** Add subtle scale ticks and provenance metadata to the `showcase.html` HUD.
