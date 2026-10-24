@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- 注意：請用本機伺服器開啟（例如 Cursor 的 Live Server 擴充功能），不要直接雙擊 HTML 檔，否則瀏覽器會封鎖從 file:// 載入 .glb 模型。 -->
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
@@ -184,6 +185,10 @@ loadGLB('生態箱.glb').then((gltf) => {
   camera.lookAt(lookCover);
   phase = 'cover';
   document.getElementById('open').classList.add('ready');
+}).catch((err) => {
+  console.error('生態箱模型載入失敗', err);
+  statusEl.textContent = '載入失敗';
+  statusEl.classList.add('on');
 });
 
 function placeBeetles(){
@@ -200,6 +205,10 @@ function placeBeetles(){
   }))).then(() => {
     statusEl.textContent = 'DRAG · SCROLL';
     setTimeout(() => statusEl.classList.remove('on'), 1600);
+  }).catch((err) => {
+    console.error('甲蟲模型載入失敗', err);
+    statusEl.textContent = '載入失敗';
+    statusEl.classList.add('on');
   });
 }
 

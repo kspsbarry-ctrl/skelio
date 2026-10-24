@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- 注意：請用本機伺服器開啟（例如 Cursor 的 Live Server 擴充功能），不要直接雙擊 HTML 檔，否則瀏覽器會封鎖從 file:// 載入 .glb 模型。 -->
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
@@ -298,14 +299,17 @@ function focusIndex(i){
     hintSpan.textContent = 'DRAG  ·  SCROLL';
     document.getElementById('hint').style.opacity = '0.45';
     const next = (active + 1) % N;
-    if (!insects[next]) ensure(next, true);
+    if (!insects[next]) ensure(next, true).catch(err => console.error('預載失敗', err));
+  }).catch((err) => {
+    console.error('模型載入失敗', err);
+    hintSpan.textContent = '載入失敗';
+    document.getElementById('hint').style.opacity = '0.8';
   });
 }
 
 const hash = decodeURIComponent(location.hash.replace('#',''));
 const startIdx = Math.max(0, specimens.findIndex(s => s.code === hash));
 focusIndex(startIdx);
-tick();
 
 let orbitY = 0.35, orbitX = 0.22;
 let targetY = 0.35, targetX = 0.22;
@@ -398,6 +402,7 @@ function tick(now){
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }
+requestAnimationFrame(tick);
 
 window.addEventListener('resize', () => {
   camera.aspect = innerWidth/innerHeight;

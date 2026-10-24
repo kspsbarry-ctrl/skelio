@@ -2,7 +2,7 @@ window.SKELIO = window.SKELIO || {};
 window.SKELIO.specimens = [
   { code:'0100', name:'蘇門答臘姬兜', latin:'Xylotrupes sumatrensis', photo:'photos/0100.png', cutout:false },
   { code:'0201', name:'獨角仙', latin:'Trypoxylus dichotomus', photo:'photos/0201.png', cutout:false },
-  { code:'0601', name:'蘇門答臘巨扁', latin:'Dorcus alcides', photo:'photos/0601.png', cutout:false },
+  { code:'0601', name:'蘇門答臘巨扁', latin:'Dorcus titanus yasuokai', photo:'photos/0601.png', cutout:false },
   { code:'0800', name:'戰神大兜', latin:'Megasoma mars', photo:'photos/0800.png', cutout:false },
   { code:'0900', name:'英特梅迪鬼豔鍬形蟲', latin:'Odontolabis dalmanni intermedia', photo:'photos/0900.png', cutout:true },
   { code:'1000', name:'長頸鹿鋸鍬', latin:'Prosopocoilus giraffa nishikawai', photo:'photos/1000.png', cutout:false, model:'長頸鹿.glb' },
