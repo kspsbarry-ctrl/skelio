@@ -2,8 +2,7 @@ window.SKELIO = window.SKELIO || {};
 window.SKELIO.specimens = [
   { code:'0100', name:'蘇門答臘姬兜', latin:'Xylotrupes sumatrensis', photo:'photos/0100.png', cutout:false },
   { code:'0201', name:'獨角仙', latin:'Trypoxylus dichotomus', photo:'photos/0201.png', cutout:false },
-  // 注意：0601 與 2200 的學名都是 Dorcus alcides，其中一筆可能有誤，請確認。
-  { code:'0601', name:'蘇門答臘巨扁', latin:'Dorcus alcides', photo:'photos/0601.png', cutout:false },
+  { code:'0601', name:'蘇門答臘巨扁', latin:'Dorcus titanus yasuokai', photo:'photos/0601.png', cutout:false },
   { code:'0800', name:'戰神大兜', latin:'Megasoma mars', photo:'photos/0800.png', cutout:false },
   { code:'0900', name:'英特梅迪鬼豔鍬形蟲', latin:'Odontolabis dalmanni intermedia', photo:'photos/0900.png', cutout:true },
   { code:'1000', name:'長頸鹿鋸鍬', latin:'Prosopocoilus giraffa nishikawai', photo:'photos/1000.png', cutout:false, model:'長頸鹿.glb' },
@@ -21,7 +20,6 @@ window.SKELIO.specimens = [
   { code:'1901', name:'歐洲深山鍬形蟲', latin:'Lucanus cervus akbesianus', photo:'photos/1901.png', cutout:true },
   { code:'2000', name:'薄翅天牛', latin:'Enoplocerus armillatus', photo:'photos/2000.png', cutout:true },
   { code:'2100', name:'中國大鍬', latin:'Dorcus hopei saundersi', photo:'photos/2100.png', cutout:false },
-  // 注意：與 0601 學名重複（Dorcus alcides），請確認。
   { code:'2200', name:'蘇門答臘寬扁', latin:'Dorcus alcides', photo:'photos/2200.png', cutout:true },
   { code:'2400', name:'黃邊寶石吉丁蟲', latin:'Chrysochroa limbata', photo:'photos/2400.png', cutout:false },
   { code:'HXM', name:'巨顎叉角鍬形蟲', latin:'Hexarthrius mandibularis', photo:'photos/hexarthrius.png', cutout:true, model:'巨顎叉角.glb' }
