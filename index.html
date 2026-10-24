@@ -137,6 +137,7 @@ const glassMat = new THREE.MeshStandardMaterial({
   depthWrite: false,
   side: THREE.DoubleSide
 });
+
 function panelLike(mesh){
   const geo = mesh.geometry;
   if (!geo.boundingBox) geo.computeBoundingBox();
@@ -145,6 +146,7 @@ function panelLike(mesh){
   const dims = [s.x, s.y, s.z].sort((a, b) => a - b);
   return dims[0] < dims[2] * 0.045 && dims[2] > 0.08;
 }
+
 loadGLB('生態箱.glb').then((gltf) => {
   const obj = gltf.scene;
   obj.traverse(o => {
@@ -247,6 +249,7 @@ function endDrag(){
 }
 renderer.domElement.addEventListener('pointerup', endDrag);
 renderer.domElement.addEventListener('pointercancel', endDrag);
+
 renderer.domElement.addEventListener('wheel', (e) => {
   if (phase !== 'inside') return;
   e.preventDefault();
@@ -268,6 +271,7 @@ function lookFromEye(){
   lookNow.copy(camera.position).add(viewDir);
   camera.lookAt(lookNow);
 }
+
 let t0 = performance.now();
 function tick(now){
   const t = (now - t0) / 1000;
