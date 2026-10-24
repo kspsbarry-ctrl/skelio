@@ -59,14 +59,14 @@
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const beetles = SKELIO.tank;
 const perches = [
-  { x:-0.30, y:0.74, z:-0.18, rx:0.55, ry:0.4, rz:0.95 },
-  { x:0.28, y:0.52, z:-0.22, rx:0.2, ry:-0.8, rz:-1.05 },
-  { x:0.02, y:0.30, z:-0.28, rx:0.85, ry:2.4, rz:0.35 }
+  { x:-0.22, y:0.68, rx:0.12, ry:0.4, rz:0.42 },
+  { x:0.24, y:0.46, rx:-0.08, ry:-0.65, rz:-0.5 },
+  { x:0.0, y:0.3, rx:0.18, ry:1.5, rz:0.22 }
 ];
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xf6f5f2);
-const camera = new THREE.PerspectiveCamera(32, innerWidth/innerHeight, 0.05, 100);
+const camera = new THREE.PerspectiveCamera(32, innerWidth/innerHeight, 0.2, 100);
 const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
 renderer.setSize(innerWidth, innerHeight);
@@ -93,7 +93,10 @@ const coverPos = new THREE.Vector3();
 const insidePos = new THREE.Vector3();
 const lookCover = new THREE.Vector3();
 const lookInside = new THREE.Vector3();
-let yaw = 0, pitch = 0, targetYaw = 0, targetPitch = 0;
+let yaw = 0, pitch = -0.2, targetYaw = 0, targetPitch = -0.2;
+let zoom = 1, targetZoom = 1;
+const zoomMin = 0.26, zoomMax = 1.65;
+const focus = new THREE.Vector3();
 let dragging = false, lastX = 0, lastY = 0, velYaw = 0;
 
 function loadGLB(file){
@@ -111,18 +114,47 @@ function fitCreature(obj, target){
   obj.position.sub(center);
   const maxDim = Math.max(size.x, size.y, size.z) || 1;
   obj.scale.setScalar(target / maxDim);
-  obj.traverse(o => { if (o.isMesh){ o.frustumCulled = false; o.castShadow = false; } });
+  obj.traverse(o => {
+    if (!o.isMesh) return;
+    o.frustumCulled = false;
+    o.castShadow = false;
+    o.material.polygonOffset = true;
+    o.material.polygonOffsetFactor = -1;
+    o.material.polygonOffsetUnits = -1;
+  });
   const g = new THREE.Group();
   g.add(obj);
   return g;
 }
 
+const glassMat = new THREE.MeshStandardMaterial({
+  color: 0xe7f1ea,
+  transparent: true,
+  opacity: 0.16,
+  roughness: 0.04,
+  metalness: 0,
+  depthWrite: false,
+  side: THREE.DoubleSide
+});
+function panelLike(mesh){
+  const geo = mesh.geometry;
+  if (!geo.boundingBox) geo.computeBoundingBox();
+  const s = new THREE.Vector3();
+  geo.boundingBox.getSize(s);
+  const dims = [s.x, s.y, s.z].sort((a, b) => a - b);
+  return dims[0] < dims[2] * 0.045 && dims[2] > 0.08;
+}
 loadGLB('生態箱.glb').then((gltf) => {
   const obj = gltf.scene;
   obj.traverse(o => {
     if (!o.isMesh) return;
-    o.material.side = THREE.DoubleSide;
     o.frustumCulled = false;
+    if (panelLike(o)){
+      o.material = glassMat;
+      o.renderOrder = 2;
+    } else if (o.material){
+      o.material.side = THREE.DoubleSide;
+    }
   });
   const bounds = new THREE.Box3().setFromObject(obj);
   const size = new THREE.Vector3();
@@ -140,10 +172,14 @@ loadGLB('生態箱.glb').then((gltf) => {
   boxMesh = wrap;
   boxSize.set(size.x * s, height, size.z * s);
 
-  coverPos.set(boxSize.x * 0.08, boxSize.y * 0.46, boxSize.z * 3.35);
-  insidePos.set(0, boxSize.y * 0.5, boxSize.z * 0.22);
+  const front = boxSize.z * 0.5;
+  coverPos.set(0, boxSize.y * 0.5, front + boxSize.y * 1.65);
+  insidePos.set(0, boxSize.y * 0.55, front + boxSize.y * 1.35);
   lookCover.set(0, boxSize.y * 0.46, 0);
-  lookInside.set(0, boxSize.y * 0.5, -boxSize.z * 0.2);
+  lookInside.set(0, boxSize.y * 0.44, -boxSize.z * 0.08);
+  focus.set(0, boxSize.y * 0.46, 0);
+  const aim = new THREE.Vector3().subVectors(lookInside, insidePos);
+  targetPitch = pitch = Math.atan2(aim.y, Math.hypot(aim.x, aim.z));
   camera.position.copy(coverPos);
   camera.lookAt(lookCover);
   phase = 'cover';
@@ -151,18 +187,18 @@ loadGLB('生態箱.glb').then((gltf) => {
 });
 
 function placeBeetles(){
-  const target = boxSize.y * 0.22;
+  const target = boxSize.y * 0.15;
   statusEl.textContent = 'LOADING';
   statusEl.classList.add('on');
   return Promise.all(beetles.map((spec, i) => loadGLB(spec.model).then((gltf) => {
     const g = fitCreature(gltf.scene, target);
     const p = perches[i];
-    g.position.set(p.x * boxSize.x, p.y * boxSize.y, p.z * boxSize.z);
+    g.position.set(p.x * boxSize.x, p.y * boxSize.y, -boxSize.z * 0.08);
     g.rotation.set(p.rx, p.ry, p.rz);
     scene.add(g);
     statusEl.textContent = 'LOADING  ' + (i + 1) + ' / ' + beetles.length;
   }))).then(() => {
-    statusEl.textContent = 'DRAG TO LOOK';
+    statusEl.textContent = 'DRAG · SCROLL';
     setTimeout(() => statusEl.classList.remove('on'), 1600);
   });
 }
@@ -193,7 +229,7 @@ renderer.domElement.addEventListener('pointermove', (e) => {
   lastX = e.clientX;
   lastY = e.clientY;
   targetYaw -= dx * 0.005;
-  targetPitch = Math.max(-0.45, Math.min(0.45, targetPitch + dy * 0.003));
+  targetPitch = Math.max(-0.35, Math.min(0.28, targetPitch + dy * 0.003));
   velYaw = -dx * 0.005;
 });
 function endDrag(){
@@ -202,10 +238,27 @@ function endDrag(){
 }
 renderer.domElement.addEventListener('pointerup', endDrag);
 renderer.domElement.addEventListener('pointercancel', endDrag);
+renderer.domElement.addEventListener('wheel', (e) => {
+  if (phase !== 'inside') return;
+  e.preventDefault();
+  const line = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1;
+  const step = Math.max(-0.12, Math.min(0.12, e.deltaY * line * 0.0011));
+  targetZoom = Math.max(zoomMin, Math.min(zoomMax, targetZoom + step));
+}, { passive: false });
 
 const camNow = new THREE.Vector3();
 const lookNow = new THREE.Vector3();
+const viewDir = new THREE.Vector3();
 const insideTone = new THREE.Color(0xe7e3da);
+const coverFov = 32;
+const insideFov = 48;
+
+function lookFromEye(){
+  const cy = Math.cos(pitch);
+  viewDir.set(Math.sin(yaw) * cy, Math.sin(pitch), -Math.cos(yaw) * cy);
+  lookNow.copy(camera.position).add(viewDir);
+  camera.lookAt(lookNow);
+}
 let t0 = performance.now();
 function tick(now){
   const t = (now - t0) / 1000;
@@ -219,6 +272,8 @@ function tick(now){
     lookNow.lerpVectors(lookCover, lookInside, e);
     camera.position.copy(camNow);
     camera.lookAt(lookNow);
+    camera.fov = coverFov + (insideFov - coverFov) * e;
+    camera.updateProjectionMatrix();
     if (boxMesh) boxMesh.rotation.y += (0 - boxMesh.rotation.y) * 0.08;
     scene.background.lerp(insideTone, 0.04);
     if (u >= 1) phase = 'inside';
@@ -229,12 +284,10 @@ function tick(now){
     const k = reduce ? 1 : 0.08;
     yaw += (targetYaw - yaw) * k;
     pitch += (targetPitch - pitch) * k;
-    const look = lookInside.clone();
-    look.x += Math.sin(yaw) * 0.8;
-    look.y += pitch * 0.6;
-    look.z += -Math.cos(yaw) * 0.35;
-    camera.position.copy(insidePos);
-    camera.lookAt(look);
+    zoom += (targetZoom - zoom) * (reduce ? 1 : 0.14);
+    camNow.copy(insidePos).sub(focus).multiplyScalar(zoom).add(focus);
+    camera.position.copy(camNow);
+    lookFromEye();
   }
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
