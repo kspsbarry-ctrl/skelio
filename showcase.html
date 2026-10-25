@@ -96,8 +96,8 @@ function updateHUD(i){
   const info = document.getElementById('info');
   info.classList.remove('show');
   requestAnimationFrame(() => {
-    document.getElementById('infoCode').textContent = '#' + s.code;
-    document.getElementById('infoLatin').textContent = s.latin;
+    document.getElementById('infoCode').textContent = s.code ? '#' + s.code : '';
+    document.getElementById('infoLatin').textContent = s.latin || '';
     document.getElementById('infoCommon').textContent = s.name;
     requestAnimationFrame(() => info.classList.add('show'));
   });

@@ -59,11 +59,7 @@
 <script>
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const beetles = SKELIO.tank;
-const perches = [
-  { x:-0.22, y:0.68, rx:0.12, ry:0.4, rz:0.42 },
-  { x:0.24, y:0.46, rx:-0.08, ry:-0.65, rz:-0.5 },
-  { x:0.0, y:0.3, rx:0.18, ry:1.5, rz:0.22 }
-];
+let seats = [];
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xf6f5f2);
@@ -112,9 +108,10 @@ function fitCreature(obj, target){
   const center = new THREE.Vector3();
   box.getSize(size);
   box.getCenter(center);
-  obj.position.sub(center);
   const maxDim = Math.max(size.x, size.y, size.z) || 1;
-  obj.scale.setScalar(target / maxDim);
+  const fitted = target / maxDim;
+  obj.scale.setScalar(fitted);
+  obj.position.copy(center).multiplyScalar(-fitted);
   obj.traverse(o => {
     if (!o.isMesh) return;
     o.frustumCulled = false;
@@ -125,7 +122,137 @@ function fitCreature(obj, target){
   });
   const g = new THREE.Group();
   g.add(obj);
+  g.userData.belly = size.y * fitted * 0.5;
+  g.userData.longAxis = size.x >= size.z ? 'x' : 'z';
   return g;
+}
+
+function collectSeats(root){
+  root.updateMatrixWorld(true);
+  const best = new Map();
+  const vA = new THREE.Vector3();
+  const vB = new THREE.Vector3();
+  const vC = new THREE.Vector3();
+  const e1 = new THREE.Vector3();
+  const e2 = new THREE.Vector3();
+  const n = new THREE.Vector3();
+  const mid = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  const size = new THREE.Vector3();
+  root.traverse(mesh => {
+    if (!mesh.isMesh || mesh.material === glassMat || !mesh.geometry) return;
+    const box = new THREE.Box3().setFromObject(mesh);
+    box.getSize(size);
+    box.getCenter(center);
+    const longest = Math.max(size.x, size.y, size.z);
+    if (longest < boxSize.y * 0.12) return;
+    const axis = new THREE.Vector3(1, 0, 0);
+    if (size.y >= size.x && size.y >= size.z) axis.set(0, 1, 0);
+    else if (size.z >= size.x && size.z >= size.y) axis.set(0, 0, 1);
+    const pos = mesh.geometry.attributes.position;
+    const index = mesh.geometry.index;
+    const triCount = index ? index.count / 3 : pos.count / 3;
+    const step = Math.max(1, Math.floor(triCount / 160));
+    for (let t = 0; t < triCount; t += step){
+      const i0 = index ? index.getX(t * 3) : t * 3;
+      const i1 = index ? index.getX(t * 3 + 1) : t * 3 + 1;
+      const i2 = index ? index.getX(t * 3 + 2) : t * 3 + 2;
+      vA.fromBufferAttribute(pos, i0).applyMatrix4(mesh.matrixWorld);
+      vB.fromBufferAttribute(pos, i1).applyMatrix4(mesh.matrixWorld);
+      vC.fromBufferAttribute(pos, i2).applyMatrix4(mesh.matrixWorld);
+      e1.subVectors(vB, vA);
+      e2.subVectors(vC, vA);
+      n.crossVectors(e1, e2);
+      const area = n.length() * 0.5;
+      if (area < 2e-5) continue;
+      n.multiplyScalar(1 / (area * 2));
+      const span = Math.max(e1.length(), e2.length(), vB.distanceTo(vC));
+      const altitude = span > 1e-6 ? (area * 2) / span : 0;
+      if (altitude < span * 0.12) continue;
+      mid.copy(vA).add(vB).add(vC).multiplyScalar(1 / 3);
+      const outward = e1.copy(mid).sub(center);
+      if (outward.lengthSq() > 1e-4 && n.dot(outward) < -0.15 * outward.length()) n.negate();
+      if (n.y < 0.18 || n.z < 0.12) continue;
+      if (mid.y < boxSize.y * 0.2 || mid.y > boxSize.y * 0.9) continue;
+      if (Math.abs(mid.x) > boxSize.x * 0.4 || Math.abs(mid.z) > boxSize.z * 0.36) continue;
+      const tangent = axis.clone().addScaledVector(n, -axis.dot(n));
+      if (tangent.lengthSq() < 1e-6) continue;
+      tangent.normalize();
+      const score = Math.sqrt(area) * (0.4 + (1 - Math.abs(n.y - 0.62)));
+      const list = best.get(mesh.uuid) || [];
+      list.push({
+        point: mid.clone(),
+        normal: n.clone(),
+        tangent: tangent.clone(),
+        score: score,
+        mesh: mesh
+      });
+      if (list.length > 10){
+        list.sort((a, b) => b.score - a.score);
+        list.length = 8;
+      }
+      best.set(mesh.uuid, list);
+    }
+  });
+  const pools = Array.from(best.values()).map(list => list.sort((a, b) => b.score - a.score));
+  pools.sort((a, b) => b[0].score - a[0].score);
+  const raycaster = new THREE.Raycaster();
+  raycaster.near = 0.01;
+  raycaster.far = 0.4;
+  const origin = new THREE.Vector3();
+  const dir = new THREE.Vector3();
+  const side = new THREE.Vector3();
+  const reach = boxSize.y * 0.045;
+  function grounded(seat){
+    side.crossVectors(seat.normal, seat.tangent).normalize();
+    dir.copy(seat.normal).negate();
+    const checks = [[0, 0], [reach, 0], [-reach, 0], [0, reach * 0.55], [0, -reach * 0.55]];
+    for (let i = 0; i < checks.length; i++){
+      origin.copy(seat.point)
+        .addScaledVector(seat.tangent, checks[i][0])
+        .addScaledVector(side, checks[i][1])
+        .addScaledVector(seat.normal, 0.18);
+      raycaster.set(origin, dir);
+      if (!raycaster.intersectObject(seat.mesh, false).length) return false;
+    }
+    return true;
+  }
+  const chosen = [];
+  function take(requireGround, maxFlat, gap){
+    let flats = chosen.filter(s => s.normal.y > 0.82).length;
+    pools.forEach(list => {
+      if (chosen.length >= beetles.length) return;
+      const seat = list.find(s => !chosen.includes(s)
+        && chosen.every(c => c.point.distanceTo(s.point) > gap)
+        && !(s.normal.y > 0.82 && flats >= maxFlat)
+        && (!requireGround || grounded(s)));
+      if (!seat) return;
+      chosen.push(seat);
+      if (seat.normal.y > 0.82) flats += 1;
+    });
+  }
+  const wide = boxSize.x * 0.16;
+  take(true, Math.ceil(beetles.length / 3), wide);
+  if (chosen.length < beetles.length) take(true, beetles.length, boxSize.x * 0.1);
+  if (chosen.length < beetles.length) take(false, beetles.length, boxSize.x * 0.08);
+  return chosen.slice(0, beetles.length);
+}
+
+const sitX = new THREE.Vector3();
+const sitZ = new THREE.Vector3();
+const sitM = new THREE.Matrix4();
+function sitOn(group, seat){
+  if (group.userData.longAxis === 'z'){
+    sitX.crossVectors(seat.normal, seat.tangent).normalize();
+    sitZ.crossVectors(sitX, seat.normal).normalize();
+  } else {
+    sitX.copy(seat.tangent);
+    sitZ.crossVectors(seat.normal, sitX).normalize();
+    sitX.crossVectors(sitZ, seat.normal).normalize();
+  }
+  sitM.makeBasis(sitX, seat.normal, sitZ);
+  group.quaternion.setFromRotationMatrix(sitM);
+  group.position.copy(seat.point).addScaledVector(seat.normal, group.userData.belly);
 }
 
 const glassMat = new THREE.MeshStandardMaterial({
@@ -185,6 +312,7 @@ loadGLB('生態箱.glb').then((gltf) => {
   targetPitch = pitch = Math.atan2(aim.y, Math.hypot(aim.x, aim.z));
   camera.position.copy(coverPos);
   camera.lookAt(lookCover);
+  seats = collectSeats(wrap);
   phase = 'cover';
   document.getElementById('open').classList.add('ready');
 }).catch((err) => {
@@ -194,14 +322,13 @@ loadGLB('生態箱.glb').then((gltf) => {
 });
 
 function placeBeetles(){
-  const target = boxSize.y * 0.15;
+  const target = boxSize.y * 0.12;
   statusEl.textContent = 'LOADING';
   statusEl.classList.add('on');
   return Promise.all(beetles.map((spec, i) => loadGLB(spec.model).then((gltf) => {
     const g = fitCreature(gltf.scene, target);
-    const p = perches[i];
-    g.position.set(p.x * boxSize.x, p.y * boxSize.y, -boxSize.z * 0.08);
-    g.rotation.set(p.rx, p.ry, p.rz);
+    const seat = seats[i] || seats[0];
+    if (seat) sitOn(g, seat);
     scene.add(g);
     statusEl.textContent = 'LOADING  ' + (i + 1) + ' / ' + beetles.length;
   }))).then(() => {
