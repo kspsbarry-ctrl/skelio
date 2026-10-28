@@ -234,7 +234,7 @@ const ground = new THREE.Mesh(
   })
 );
 ground.rotation.x = -Math.PI/2;
-ground.position.y = -2.15;
+ground.position.y = -1.70;
 scene.add(ground);
 
 // 已移除 addLeaf 背景深色剪影幾何體，保持生態缸單品舞台純淨
@@ -268,11 +268,11 @@ const motes = new THREE.Points(moteGeo, new THREE.PointsMaterial({
 }));
 scene.add(motes);
 
-const groundY = -1.7;
+const groundY = -1.70;
 const poses = [
-  { x: 0.42, y: 0.55, z: 0.18 },
-  { x: 0.12, y: -0.85, z: 1.05 },
-  { x: -0.38, y: 2.35, z: -0.55 },
+  { x: 0.0, y:  0.55, z: 0.0 },
+  { x: 0.0, y: -0.65, z: 0.0 },
+  { x: 0.0, y:  0.35, z: 0.0 },
 ];
 
 const insects = new Array(N);
@@ -336,6 +336,15 @@ function seat(group){
   group.position.x -= center.x;
   group.position.z -= center.z;
   group.position.y = groundY - box.min.y;
+  group.updateMatrixWorld(true);
+  // Iterative verification to guarantee zero gap (< 0.001) on ground disc at groundY
+  for (let iter = 0; iter < 3; iter++){
+    const checkBox = new THREE.Box3().setFromObject(group);
+    const gap = checkBox.min.y - groundY;
+    if (Math.abs(gap) <= 0.0005) break;
+    group.position.y -= gap;
+    group.updateMatrixWorld(true);
+  }
   return group.position.y;
 }
 

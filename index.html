@@ -334,17 +334,17 @@ function fitCreature(obj, target){
 }
 
 const seatPrefs = {
-  '長頸鹿.glb': { x: -0.30, y: 0.64, z: 0.08, climb: true, lift: 1.05 },
-  '巴拉望.glb': { x: 0.28, y: 0.60, z: 0.06, climb: true, lift: 1.05 },
-  '巨顎叉角.glb': { x: -0.22, y: 0.42, z: 0.12, climb: true, lift: 1.08 },
-  '戰神大兜.glb': { x: 0.18, y: 0.34, z: 0.10, climb: false, lift: 1.12 },
-  '兔子.glb': { x: -0.08, y: 0.52, z: 0.14, climb: false, lift: 1.1 },
-  '泰坦天牛.glb': { x: 0.06, y: 0.48, z: 0.02, climb: false, lift: 1.08 },
-  '彩虹.glb': { x: -0.32, y: 0.28, z: 0.04, climb: true, lift: 1.05 },
-  '彩虹+藍.glb': { x: 0.30, y: 0.26, z: 0.08, climb: true, lift: 1.05 },
-  '傑森暴龍.glb': { x: 0.22, y: 0.70, z: 0.00, climb: true, lift: 1.05 },
-  '巨人柱.glb': { x: -0.16, y: 0.22, z: 0.16, climb: false, lift: 1.15 },
-  '蠍子.glb': { x: 0.04, y: 0.20, z: 0.18, climb: false, lift: 1.12 }
+  '巨顎叉角.glb': { x: -0.1235, y: 0.5297, z: -0.0905, climb: true,  lift: 1.0277, anchor: [-0.5559, 1.9070, -0.1780], normal: [ 0.7979, 0.2302,  0.5571], mesh: 'tripo_part_4',  patchArea: 0.0390, contactArea: 0.0390 },
+  '彩虹+藍.glb':  { x:  0.2246, y: 0.4299, z:  0.0770, climb: true,  lift: 0.8711, anchor: [ 1.0113, 1.5477,  0.1515], normal: [-0.4979, 0.2405,  0.8332], mesh: 'tripo_part_5',  patchArea: 0.0707, contactArea: 0.0454 },
+  '戰神大兜.glb': { x:  0.0774, y: 0.4202, z: -0.0100, climb: false, lift: 0.9879, anchor: [ 0.3483, 1.5127, -0.0196], normal: [-0.3878, 0.7862,  0.4811], mesh: 'tripo_part_16', patchArea: 0.0519, contactArea: 0.0457 },
+  '巴拉望.glb':   { x:  0.2610, y: 0.6487, z:  0.1685, climb: true,  lift: 1.1411, anchor: [ 1.1753, 2.3354,  0.3313], normal: [ 0.0682, 0.0276,  0.9973], mesh: 'tripo_part_5',  patchArea: 0.0682, contactArea: 0.0680 },
+  '長頸鹿.glb':   { x: -0.3618, y: 0.6402, z:  0.1613, climb: true,  lift: 0.8465, anchor: [-1.6287, 2.3048,  0.3172], normal: [-0.0995, 0.1411,  0.9850], mesh: 'tripo_part_11', patchArea: 0.0432, contactArea: 0.0168 },
+  '泰坦天牛.glb': { x:  0.0003, y: 0.5696, z:  0.1114, climb: false, lift: 0.8487, anchor: [ 0.0015, 2.0507,  0.2191], normal: [ 0.1744, 0.9760,  0.1307], mesh: 'tripo_part_8',  patchArea: 0.0417, contactArea: 0.0417 },
+  '彩虹.glb':     { x:  0.1032, y: 0.5307, z: -0.1648, climb: true,  lift: 0.8385, anchor: [ 0.4647, 1.9104, -0.3240], normal: [-0.6157, 0.0266,  0.7876], mesh: 'tripo_part_16', patchArea: 0.0453, contactArea: 0.0372 },
+  '蠍子.glb':     { x:  0.3351, y: 0.5626, z:  0.1372, climb: true,  lift: 0.9913, anchor: [ 1.5089, 2.0254,  0.2699], normal: [ 0.7313, 0.0621,  0.6793], mesh: 'tripo_part_5',  patchArea: 0.0561, contactArea: 0.0510 },
+  '巨人柱.glb':   { x:  0.3615, y: 0.3438, z: -0.2580, climb: false, lift: 0.9726, anchor: [ 1.6275, 1.2376, -0.5074], normal: [-0.0885, 0.9959, -0.0209], mesh: 'tripo_part_80', patchArea: 0.0433, contactArea: 0.0433 },
+  '兔子.glb':     { x: -0.2664, y: 0.6803, z:  0.1389, climb: false, lift: 0.9873, anchor: [-1.1995, 2.4491,  0.2731], normal: [ 0.3710, 0.8526,  0.3679], mesh: 'tripo_part_17', patchArea: 0.0467, contactArea: 0.0467 },
+  '傑森暴龍.glb': { x:  0.1998, y: 0.6994, z:  0.0013, climb: false, lift: 1.0280, anchor: [ 0.8997, 2.5177,  0.0025], normal: [-0.6354, 0.7674,  0.0858], mesh: 'tripo_part_18', patchArea: 0.0652, contactArea: 0.0453 }
 };
 
 const groundRay = new THREE.Raycaster();
@@ -642,49 +642,78 @@ function orientOn(group, normal, tangent){
   group.quaternion.setFromRotationMatrix(sitM);
 }
 function sitOn(group, seat){
-  sitNormal.copy(seat.normal).normalize();
-  orientOn(group, sitNormal, seat.tangent);
-  const lift = Math.max(
-    group.userData.belly * (Math.abs(sitNormal.y) > 0.55 ? 1.35 : 1.2),
-    boxSize.y * 0.016
-  );
-  const meshes = tankMeshes.length ? tankMeshes : (seat.mesh ? [seat.mesh] : []);
-  sitOrigin.copy(seat.point).addScaledVector(sitNormal, Math.max(0.55, lift * 3.2));
-  sitDir.copy(sitNormal).negate();
-  sitRay.near = 0.001;
-  sitRay.far = Math.max(1.4, lift * 7);
-  sitRay.set(sitOrigin, sitDir);
-  const hit = meshes.length ? sitRay.intersectObjects(meshes, false)[0] : null;
-  const anchor = hit ? hit.point : seat.point;
-  if (hit && hit.face){
-    const hn = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize();
-    if (hn.dot(sitNormal) < 0) hn.negate();
-    if (hn.dot(seat.normal) > 0.72){
-      sitNormal.copy(hn);
-      orientOn(group, sitNormal, seat.tangent);
-    }
-  }
-  group.position.copy(anchor).addScaledVector(sitNormal, lift);
+  const spec = group.userData && group.userData.spec;
+  const pref = spec && seatPrefs[spec.model];
+  const anchor = (pref && pref.anchor)
+    ? new THREE.Vector3(pref.anchor[0], pref.anchor[1], pref.anchor[2])
+    : seat.point.clone();
+  sitNormal.copy(
+    (pref && pref.normal)
+      ? new THREE.Vector3(pref.normal[0], pref.normal[1], pref.normal[2])
+      : seat.normal
+  ).normalize();
+  const tangent = makeTangent(sitNormal);
+  orientOn(group, sitNormal, tangent);
 
-  const halfL = group.userData.halfLen || lift;
-  const halfS = group.userData.halfSide || lift * 0.45;
-  const side = new THREE.Vector3().crossVectors(sitNormal, sitX).normalize();
-  const samples = [[0, 0], [halfL, 0], [-halfL, 0], [0, halfS], [0, -halfS], [halfL * 0.55, halfS * 0.45], [-halfL * 0.55, -halfS * 0.45]];
-  let extra = 0;
-  for (let i = 0; i < samples.length; i++){
-    sitOrigin.copy(group.position)
-      .addScaledVector(sitX, samples[i][0])
-      .addScaledVector(side, samples[i][1])
-      .addScaledVector(sitNormal, lift * 1.1);
+  // Start with the pre-converged normal offset (belly * pref.lift)
+  const baseBelly = group.userData.rawBelly || group.userData.belly;
+  let normalOffset = baseBelly * (pref && pref.lift ? pref.lift : 1.0);
+  group.position.copy(anchor).addScaledVector(sitNormal, normalOffset);
+  group.updateMatrixWorld(true);
+
+  // Iterative Re-scan Loop (up to 4 passes): verify ventral plane contact (|gap| <= 0.002) and strict glass cube bounds
+  const meshes = tankMeshes.length ? tankMeshes : (seat.mesh ? [seat.mesh] : []);
+  const vWorld = new THREE.Vector3();
+  const rel = new THREE.Vector3();
+  for (let iter = 0; iter < 4; iter++){
+    // 1. Measure ventral contact plane distance along sitNormal
+    let minProj = Infinity;
+    group.traverse(o => {
+      if (!o.isMesh || !o.geometry || !o.geometry.attributes.position) return;
+      const posAttr = o.geometry.attributes.position;
+      const step = Math.max(1, Math.floor(posAttr.count / 250));
+      for (let k = 0; k < posAttr.count; k += step){
+        vWorld.fromBufferAttribute(posAttr, k).applyMatrix4(o.matrixWorld);
+        rel.subVectors(vWorld, anchor);
+        const proj = rel.dot(sitNormal);
+        if (proj < minProj) minProj = proj;
+      }
+    });
+    // Raycast at anchor along -sitNormal to confirm exact surface contact point
+    sitOrigin.copy(anchor).addScaledVector(sitNormal, 0.18);
     sitDir.copy(sitNormal).negate();
-    sitRay.far = lift * 2.8;
+    sitRay.near = 0.001;
+    sitRay.far = 0.36;
     sitRay.set(sitOrigin, sitDir);
-    const sink = meshes.length ? sitRay.intersectObjects(meshes, false)[0] : null;
-    if (sink && sink.distance < lift){
-      extra = Math.max(extra, lift - sink.distance);
+    const hit = meshes.length ? sitRay.intersectObjects(meshes, false)[0] : null;
+    const surfProj = hit ? rel.subVectors(hit.point, anchor).dot(sitNormal) : 0;
+    const gap = isFinite(minProj) ? (minProj - surfProj) : 0;
+
+    if (Math.abs(gap) > 0.001){
+      normalOffset -= gap;
+      group.position.copy(anchor).addScaledVector(sitNormal, normalOffset);
+      group.updateMatrixWorld(true);
+    }
+
+    // 2. Enforce strict interior glass cube volume bounds: X in [-1.88, 1.88], Y in [0.94, 3.12], Z in [-0.80, 0.68]
+    const wbox = new THREE.Box3().setFromObject(group);
+    let shiftX = 0, shiftY = 0, shiftZ = 0;
+    if (wbox.min.x < -1.88) shiftX = -1.88 - wbox.min.x;
+    else if (wbox.max.x > 1.88) shiftX = 1.88 - wbox.max.x;
+    if (wbox.min.y < 0.94) shiftY = 0.94 - wbox.min.y;
+    else if (wbox.max.y > 3.12) shiftY = 3.12 - wbox.max.y;
+    if (wbox.min.z < -0.80) shiftZ = -0.80 - wbox.min.z;
+    else if (wbox.max.z > 0.68) shiftZ = 0.68 - wbox.max.z;
+    if (shiftX !== 0 || shiftY !== 0 || shiftZ !== 0){
+      anchor.x += shiftX;
+      anchor.y += shiftY;
+      anchor.z += shiftZ;
+      group.position.copy(anchor).addScaledVector(sitNormal, normalOffset);
+      group.updateMatrixWorld(true);
+    } else if (Math.abs(gap) <= 0.001){
+      break;
     }
   }
-  if (extra > 0) group.position.addScaledVector(sitNormal, extra + lift * 0.06);
 }
 
 const texLoader = new THREE.TextureLoader();
@@ -1009,8 +1038,7 @@ function placeBeetles(){
     const g = fitCreature(gltf.scene, target);
     g.userData.isInsect = true;
     g.userData.spec = spec;
-    const pref = seatPrefs[spec.model];
-    if (pref && pref.lift) g.userData.belly *= pref.lift;
+    g.userData.rawBelly = g.userData.belly;
     const seat = assigned[i];
     if (seat) sitOn(g, seat);
     scene.add(g);
