@@ -10,7 +10,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <style>
-  :root{ --stone:#e7e2d8; --ink-deep:#0c0b08; --moss:#67755c; --amber:#a9793f; }
+  :root{ --stone:#ece7de; --stone-mute:#a8a296; --ink-deep:#0c0b08; --moss:#9aa88d; --amber:#d19a52; }
   *{margin:0; padding:0; box-sizing:border-box;}
   html,body{ height:100%; background:var(--ink-deep); color:var(--stone); overflow:hidden; }
   body{ font-family:'Noto Serif TC', serif; cursor:grab; }
@@ -32,7 +32,7 @@
   .brand, .back, .counter{
     font-family:'Cinzel', serif; font-size:11px; letter-spacing:0.2em;
   }
-  .back{ opacity:.65; }
+  .back{ color:var(--stone-mute); opacity:1; transition:color .2s ease; }
   .back:hover{ color:var(--amber); opacity:1; }
   .info .code{ font-family:'Cinzel', serif; font-size:11px; letter-spacing:0.16em; color:var(--amber); }
   .info .latin{ font-style:italic; color:var(--moss); margin-top:6px; font-size:clamp(14px,1.6vw,18px); }
@@ -51,17 +51,18 @@
   .info.show > *{ opacity:1; transform:none; }
   .picks{ display:flex; flex-direction:column; gap:14px; align-items:flex-end; }
   .pick{
-    font-family:'Noto Serif TC', serif; font-size:15px; letter-spacing:-.02em;
-    opacity:.28; background:none; border:0; color:inherit; padding:0;
-    transition:opacity .45s ease, transform .55s cubic-bezier(.22,.8,.2,1);
+    font-family:'Noto Serif TC', serif; font-size:15px; letter-spacing:.01em;
+    color:var(--stone-mute); opacity:1; background:none; border:0; padding:2px 0;
+    transition:color .35s ease, transform .55s cubic-bezier(.22,.8,.2,1);
   }
-  .pick.active{ opacity:1; transform:translateX(-8px); }
+  .pick:hover{ color:var(--stone); }
+  .pick.active{ color:var(--stone); font-weight:700; transform:translateX(-8px); }
 
   .hint{
     position:fixed; bottom:4.5vw; left:50%; transform:translateX(-50%);
     z-index:3; pointer-events:none;
-    font-family:'Cinzel', serif; font-size:10px; letter-spacing:0.28em; opacity:.45;
-    transition:opacity .8s ease;
+    font-family:'Cinzel', serif; font-size:11px; letter-spacing:0.24em; color:var(--stone-mute); opacity:1;
+    transition:opacity .8s ease, color .3s ease;
     max-width:min(86vw, 520px); text-align:center; line-height:1.6;
   }
 </style>
@@ -96,7 +97,7 @@ const hintSpan = hintEl ? hintEl.querySelector('span') : null;
 function showHint(text, strong){
   if (!hintSpan) return;
   hintSpan.textContent = text;
-  if (hintEl) hintEl.style.opacity = strong ? '0.85' : '0.45';
+  if (hintEl) hintEl.style.color = strong ? 'var(--stone)' : 'var(--stone-mute)';
 }
 function loadFailText(){
   return location.protocol === 'file:' ? '載入失敗 · 請以 Live Server 開啟' : '載入失敗';
