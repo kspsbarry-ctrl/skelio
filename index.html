@@ -176,6 +176,9 @@ const focus = new THREE.Vector3();
 let dragging = false, lastX = 0, lastY = 0, velYaw = 0;
 
 function loadGLB(file){
+  if (!file || typeof file !== 'string'){
+    return Promise.reject(new Error('缺少模型'));
+  }
   return new Promise((resolve, reject) => {
     loader.load('models/' + encodeURIComponent(file), resolve, undefined, reject);
   });
@@ -650,7 +653,7 @@ loadGLB('生態箱.glb').then((gltf) => {
   const wrap = new THREE.Group();
   wrap.add(obj);
   const height = 3.6;
-  const s = height / size.y;
+  const s = height / (size.y || 1);
   wrap.scale.setScalar(s);
   wrap.position.y = height / 2;
   scene.add(wrap);
