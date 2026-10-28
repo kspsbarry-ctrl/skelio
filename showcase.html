@@ -52,6 +52,7 @@
     z-index:3; pointer-events:none;
     font-family:'Cinzel', serif; font-size:10px; letter-spacing:0.28em; opacity:.45;
     transition:opacity .8s ease;
+    max-width:min(86vw, 520px); text-align:center; line-height:1.6;
   }
 </style>
 </head>
@@ -74,16 +75,33 @@
 <div class="hint" id="hint"><span>LOADING</span></div>
 <script src="specimens.js"></script>
 <script>
+const hintEl = document.getElementById('hint');
+const hintSpan = hintEl ? hintEl.querySelector('span') : null;
+function showHint(text, strong){
+  if (!hintSpan) return;
+  hintSpan.textContent = text;
+  if (hintEl) hintEl.style.opacity = strong ? '0.85' : '0.45';
+}
+function loadFailText(){
+  return location.protocol === 'file:' ? '載入失敗 · 請以 Live Server 開啟' : '載入失敗';
+}
+function boot(){
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-const specimens = SKELIO.tank;
+const specimens = (Array.isArray(SKELIO.tank) ? SKELIO.tank : []).filter(spec => spec && typeof spec.model === 'string' && spec.model);
 const N = specimens.length;
+let contextLost = false;
+let frameId = 0;
+if (!N){
+  showHint('沒有可展示的模型', true);
+  return;
+}
 
 const dotsEl = document.getElementById('dots');
 specimens.forEach((s, i) => {
   const b = document.createElement('button');
   b.className = 'pick' + (i===0 ? ' active' : '');
   b.type = 'button';
-  b.textContent = s.name;
+  b.textContent = s.name || s.model;
   b.addEventListener('click', () => focusIndex(i));
   dotsEl.appendChild(b);
 });
@@ -91,6 +109,7 @@ const dotEls = [...dotsEl.children];
 
 function updateHUD(i){
   const s = specimens[i];
+  if (!s) return;
   document.getElementById('counter').textContent = String(i+1).padStart(2,'0') + ' / ' + String(N).padStart(2,'0');
   dotEls.forEach((d,k) => d.classList.toggle('active', k===i));
   const info = document.getElementById('info');
@@ -98,7 +117,7 @@ function updateHUD(i){
   requestAnimationFrame(() => {
     document.getElementById('infoCode').textContent = s.code ? '#' + s.code : '';
     document.getElementById('infoLatin').textContent = s.latin || '';
-    document.getElementById('infoCommon').textContent = s.name;
+    document.getElementById('infoCommon').textContent = s.name || '';
     requestAnimationFrame(() => info.classList.add('show'));
   });
 }
@@ -109,7 +128,14 @@ const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x0c0b08, 0.045);
 const camera = new THREE.PerspectiveCamera(48, innerWidth/innerHeight, 0.1, 80);
 camera.position.set(0, 1.4, 11);
-const renderer = new THREE.WebGLRenderer({ antialias:true });
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias:true });
+} catch (err) {
+  console.error('WebGL 初始化失敗', err);
+  showHint('此瀏覽器不支援 WebGL', true);
+  return;
+}
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.setClearColor(0x0c0b08, 1);
@@ -117,6 +143,18 @@ renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 wrap.appendChild(renderer.domElement);
+renderer.domElement.addEventListener('webglcontextlost', (event) => {
+  event.preventDefault();
+  contextLost = true;
+  cancelAnimationFrame(frameId);
+  showHint('顯示中斷', true);
+});
+renderer.domElement.addEventListener('webglcontextrestored', () => {
+  contextLost = false;
+  if (hintSpan && hintSpan.textContent === '顯示中斷') showHint('DRAG  ·  SCROLL', false);
+  cancelAnimationFrame(frameId);
+  frameId = requestAnimationFrame(tick);
+});
 
 scene.add(new THREE.AmbientLight(0xb7c4a8, 0.35));
 const key = new THREE.DirectionalLight(0xfff1d2, 0.85);
@@ -129,42 +167,6 @@ const rim = new THREE.PointLight(0xffe3b0, 0.7, 18);
 camera.add(rim);
 rim.position.set(0.4, 0.2, 1);
 scene.add(camera);
-
-function punchKey(image){
-  const c = document.createElement('canvas');
-  c.width = image.width;
-  c.height = image.height;
-  const ctx = c.getContext('2d');
-  ctx.drawImage(image, 0, 0);
-  const id = ctx.getImageData(0, 0, c.width, c.height);
-  const d = id.data;
-  for (let i = 0; i < d.length; i += 4){
-    const r = d[i], g = d[i+1], b = d[i+2];
-    if (r < 22 && g < 22 && b < 22) d[i+3] = 0;
-    else if (r > 214 && g > 214 && b > 214) d[i+3] = 0;
-  }
-  ctx.putImageData(id, 0, 0);
-  return c;
-}
-
-const texLoader = new THREE.TextureLoader();
-function loadTexture(url){
-  return new Promise((resolve, reject) => {
-    texLoader.load(url, (tex) => {
-      tex.encoding = THREE.sRGBEncoding;
-      tex.anisotropy = 8;
-      try {
-        const canvas = punchKey(tex.image);
-        const t = new THREE.CanvasTexture(canvas);
-        t.encoding = THREE.sRGBEncoding;
-        t.anisotropy = 8;
-        resolve(t);
-      } catch (err) {
-        resolve(tex);
-      }
-    }, undefined, reject);
-  });
-}
 
 const ground = new THREE.Mesh(
   new THREE.CircleGeometry(9.5, 64),
@@ -232,7 +234,6 @@ const camPos = new THREE.Vector3(0, 0.35, 6.4);
 const camAim = new THREE.Vector3(0, -0.35, 0);
 const introFrom = new THREE.Vector3(0, 1.6, 12);
 const gltfLoader = new THREE.GLTFLoader();
-const hintSpan = document.getElementById('hint').querySelector('span');
 
 function prepareModel(obj){
   const box = new THREE.Box3().setFromObject(obj);
@@ -253,9 +254,19 @@ function prepareModel(obj){
 }
 
 function loadModel(spec){
+  if (!spec || typeof spec.model !== 'string' || !spec.model){
+    return Promise.reject(new Error('缺少模型'));
+  }
   const url = 'models/' + encodeURIComponent(spec.model);
   return new Promise((resolve, reject) => {
-    gltfLoader.load(url, (gltf) => resolve(prepareModel(gltf.scene)), undefined, reject);
+    gltfLoader.load(url, (gltf) => {
+      try {
+        if (!gltf || !gltf.scene) throw new Error('模型是空的');
+        resolve(prepareModel(gltf.scene));
+      } catch (err) {
+        reject(err);
+      }
+    }, undefined, reject);
   });
 }
 
@@ -271,10 +282,14 @@ function seat(group){
   return group.position.y;
 }
 
+const inflight = new Array(N);
 function ensure(i, quiet){
   if (insects[i]) return Promise.resolve(insects[i]);
-  if (!quiet) hintSpan.textContent = 'LOADING';
-  return loadModel(specimens[i]).then(group => {
+  if (inflight[i]) return inflight[i];
+  const spec = specimens[i];
+  if (!quiet) showHint('LOADING', false);
+  const job = loadModel(spec).then(group => {
+    if (insects[i]) return insects[i];
     const pose = poses[i] || poses[0];
     group.rotation.set(pose.x, pose.y, pose.z);
     const restY = seat(group);
@@ -283,33 +298,61 @@ function ensure(i, quiet){
     scene.add(group);
     insects[i] = { mesh: group, restY, seed: i * 1.7 };
     return insects[i];
+  }).catch(err => {
+    inflight[i] = null;
+    throw err;
   });
+  inflight[i] = job;
+  return job;
 }
 
 function showOnly(i){
   insects.forEach((it, k) => { if (it) it.mesh.visible = k === i; });
 }
 
-function focusIndex(i){
-  active = (i + N) % N;
+function focusIndex(i, unknown){
+  if (!N) return Promise.resolve();
+  const index = ((i % N) + N) % N;
+  active = index;
   mode = 'inspect';
-  updateHUD(active);
-  ensure(active).then(() => {
-    showOnly(active);
-    hintSpan.textContent = 'DRAG  ·  SCROLL';
-    document.getElementById('hint').style.opacity = '0.45';
-    const next = (active + 1) % N;
-    if (!insects[next]) ensure(next, true).catch(err => console.error('預載失敗', err));
+  updateHUD(index);
+  return ensure(index).then(() => {
+    if (active !== index) return;
+    showOnly(index);
+    if (unknown) showHint('找不到此標本', true);
+    else showHint('DRAG  ·  SCROLL', false);
+    const next = (index + 1) % N;
+    if (next !== index) ensure(next, true).catch(err => console.error('預載失敗', err));
   }).catch((err) => {
+    if (active !== index) return;
     console.error('模型載入失敗', err);
-    hintSpan.textContent = '載入失敗';
-    document.getElementById('hint').style.opacity = '0.8';
+    showHint(loadFailText(), true);
   });
 }
 
-const hash = decodeURIComponent(location.hash.replace('#',''));
-const startIdx = Math.max(0, specimens.findIndex(s => s.code === hash));
-focusIndex(startIdx);
+function specimenKey(){
+  let key = '';
+  try {
+    const params = new URLSearchParams(location.search);
+    key = params.get('id') || params.get('code') || '';
+  } catch (err) {
+    key = '';
+  }
+  if (!key && location.hash.length > 1){
+    try { key = decodeURIComponent(location.hash.slice(1)); }
+    catch (err) { key = location.hash.slice(1); }
+  }
+  return key;
+}
+const requestKey = specimenKey();
+let startIdx = 0;
+let unknownSpecimen = false;
+if (requestKey){
+  const found = specimens.findIndex(s => s && (s.code === requestKey || s.name === requestKey));
+  if (found < 0) unknownSpecimen = true;
+  else startIdx = found;
+}
+focusIndex(startIdx, unknownSpecimen);
 
 let orbitY = 0.35, orbitX = 0.22;
 let targetY = 0.35, targetX = 0.22;
@@ -366,6 +409,8 @@ window.addEventListener('keydown', (e) => {
 
 let t0 = performance.now();
 function tick(now){
+  frameId = requestAnimationFrame(tick);
+  if (contextLost) return;
   const t = (now - t0) / 1000;
   if (!dragging && !reduceMotion){
     targetY += velY;
@@ -399,17 +444,35 @@ function tick(now){
   const look = new THREE.Vector3().lerpVectors(new THREE.Vector3(0,0.2,0), camAim, eased);
   camera.lookAt(look);
 
-  renderer.render(scene, camera);
-  requestAnimationFrame(tick);
+  try {
+    renderer.render(scene, camera);
+  } catch (err) {
+    contextLost = true;
+    cancelAnimationFrame(frameId);
+    console.error('畫面更新中斷', err);
+    showHint('畫面更新中斷', true);
+    return;
+  }
 }
-requestAnimationFrame(tick);
+frameId = requestAnimationFrame(tick);
 
 window.addEventListener('resize', () => {
-  camera.aspect = innerWidth/innerHeight;
+  const height = innerHeight || 1;
+  camera.aspect = innerWidth / height;
   camera.updateProjectionMatrix();
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  renderer.setSize(innerWidth, innerHeight);
+  renderer.setSize(innerWidth, height);
 });
+}
+
+if (!window.THREE || !THREE.GLTFLoader || !THREE.WebGLRenderer){
+  showHint('3D 程式庫載入失敗', true);
+} else if (!window.SKELIO || !Array.isArray(SKELIO.tank)){
+  showHint('標本資料載入失敗', true);
+} else {
+  if (location.protocol === 'file:') showHint('請以 Live Server 開啟，否則無法載入模型', true);
+  boot();
+}
 </script>
 </body>
 </html>

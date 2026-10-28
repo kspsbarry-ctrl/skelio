@@ -10,7 +10,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <style>
-  :root{ --ink:#1c1b18; --paper:#f6f5f2; }
+  :root{
+    --ink:#1c1b18;
+    --paper:#f6f5f2;
+    --mute:rgba(28,27,24,.42);
+  }
   *{ margin:0; padding:0; box-sizing:border-box; }
   html,body{ height:100%; background:var(--paper); color:var(--ink); overflow:hidden; }
   body{ font-family:'Noto Serif TC', serif; }
@@ -19,14 +23,19 @@
   body.inside.dragging canvas{ cursor:grabbing; }
   .mark{
     position:fixed; top:28px; left:36px; z-index:2;
-    font-family:'Cinzel', serif; font-size:11px; letter-spacing:.32em;
-    opacity:.45; pointer-events:none;
+    font-family:'Cinzel', serif; font-size:12px; letter-spacing:.36em;
+    opacity:.5; pointer-events:none;
+  }
+  .hud{
+    position:fixed; inset:0; z-index:2; pointer-events:none;
+  }
+  .open, .back, .reset{
+    pointer-events:auto; border:0; background:transparent; color:var(--ink);
+    font-family:'Cinzel', serif; letter-spacing:.36em; cursor:pointer;
   }
   .open{
     position:fixed; left:50%; bottom:7vh; transform:translateX(-50%);
-    z-index:2; border:0; background:transparent; color:var(--ink);
-    font-family:'Cinzel', serif; font-size:12px; letter-spacing:.42em;
-    cursor:pointer; opacity:0; pointer-events:none;
+    font-size:12px; opacity:0; pointer-events:none;
     transition:opacity .6s ease;
   }
   .open.ready{ opacity:.72; pointer-events:auto; }
@@ -39,38 +48,98 @@
     background:var(--ink); animation:drip 1.8s ease-in-out infinite;
   }
   @keyframes drip{ 0%{ top:-100%; } 70%{ top:100%; } 100%{ top:100%; } }
+  .back, .reset{
+    position:fixed; top:28px; right:36px; font-size:11px; opacity:0;
+    pointer-events:none; transition:opacity .45s ease;
+  }
+  .reset{ right:118px; }
+  body.inside .back,
+  body.inside.focusing .reset{ opacity:.55; pointer-events:auto; }
+  body.inside .open{ opacity:0; pointer-events:none; }
   .status{
-    position:fixed; left:36px; bottom:28px; z-index:2;
+    position:fixed; left:36px; bottom:28px;
     font-family:'Cinzel', serif; font-size:10px; letter-spacing:.28em; opacity:0;
     transition:opacity .6s ease; pointer-events:none;
+    max-width:min(78vw, 460px); line-height:1.7; color:var(--mute);
   }
-  .status.on{ opacity:.45; }
-  body.inside .open{ opacity:0; pointer-events:none; transition:opacity .6s ease; }
+  .status.on{ opacity:1; }
+  .focus-name{
+    position:fixed; left:50%; bottom:8vh; transform:translateX(-50%);
+    font-family:'Cinzel', serif; font-size:11px; letter-spacing:.28em;
+    opacity:0; transition:opacity .45s ease; pointer-events:none; text-align:center;
+  }
+  body.focusing .focus-name{ opacity:.7; }
   @media (prefers-reduced-motion: reduce){
     .open span::after{ animation:none; }
+  }
+  @media (max-width:720px){
+    .mark, .back, .reset, .status{ left:20px; }
+    .back, .reset{ right:20px; left:auto; }
+    .reset{ right:96px; }
+    .mark{ top:20px; }
+    .back, .reset{ top:20px; }
   }
 </style>
 </head>
 <body>
-<div class="mark">SKELIO</div>
-<button class="open" id="open" type="button">OPEN<span></span></button>
-<div class="status" id="status"></div>
+<div class="hud">
+  <div class="mark">SKELIO</div>
+  <button class="open" id="open" type="button">OPEN<span></span></button>
+  <button class="reset" id="reset" type="button">RESET</button>
+  <button class="back" id="back" type="button">BACK</button>
+  <div class="focus-name" id="focusName"></div>
+  <div class="status" id="status"></div>
+</div>
 <script src="specimens.js"></script>
 <script>
+const statusEl = document.getElementById('status');
+function showStatus(text){
+  if (!statusEl) return;
+  statusEl.textContent = text;
+  statusEl.classList.add('on');
+}
+function loadFailText(){
+  return location.protocol === 'file:' ? '載入失敗 · 請以 Live Server 開啟' : '載入失敗';
+}
+function boot(){
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const beetles = SKELIO.tank;
+const beetles = (Array.isArray(SKELIO.tank) ? SKELIO.tank : []).filter(spec => spec && typeof spec.model === 'string' && spec.model);
 let seats = [];
+let contextLost = false;
+let frameId = 0;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xf6f5f2);
 const camera = new THREE.PerspectiveCamera(32, innerWidth/innerHeight, 0.2, 100);
-const renderer = new THREE.WebGLRenderer({ antialias:true });
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias:true });
+} catch (err) {
+  console.error('WebGL 初始化失敗', err);
+  showStatus('此瀏覽器不支援 WebGL');
+  return;
+}
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 document.body.appendChild(renderer.domElement);
+renderer.domElement.addEventListener('webglcontextlost', (event) => {
+  event.preventDefault();
+  contextLost = true;
+  cancelAnimationFrame(frameId);
+  showStatus('顯示中斷');
+});
+renderer.domElement.addEventListener('webglcontextrestored', () => {
+  contextLost = false;
+  if (statusEl.textContent === '顯示中斷') {
+    statusEl.textContent = '';
+    statusEl.classList.remove('on');
+  }
+  cancelAnimationFrame(frameId);
+  frameId = requestAnimationFrame(tick);
+});
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.85));
 const key = new THREE.DirectionalLight(0xfff8ee, 0.9);
@@ -81,18 +150,28 @@ fill.position.set(-4, 2, -2);
 scene.add(fill);
 
 const loader = new THREE.GLTFLoader();
-const statusEl = document.getElementById('status');
 let boxMesh = null;
+let tankMeshes = [];
+let insectGroups = [];
+let seatCatalog = [];
+let tankReady = false;
 let boxSize = new THREE.Vector3(1, 1, 1);
 let phase = 'loading';
 let enterStart = 0;
+let leaveStart = 0;
+let focusedInsect = null;
+let dragMoved = false;
+const homeFocus = new THREE.Vector3();
+let homeRadius = 6;
+const pickRay = new THREE.Raycaster();
+const pickNdc = new THREE.Vector2();
 const coverPos = new THREE.Vector3();
 const insidePos = new THREE.Vector3();
 const lookCover = new THREE.Vector3();
 const lookInside = new THREE.Vector3();
-let yaw = 0, pitch = -0.2, targetYaw = 0, targetPitch = -0.2;
-let zoom = 1, targetZoom = 1;
-const zoomMin = 0.26, zoomMax = 1.65;
+let orbitYaw = 0, orbitPitch = 0.22, targetOrbitYaw = 0, targetOrbitPitch = 0.22;
+let radius = 6, targetRadius = 6;
+let radiusMin = 1.2, radiusMax = 12;
 const focus = new THREE.Vector3();
 let dragging = false, lastX = 0, lastY = 0, velYaw = 0;
 
@@ -116,20 +195,79 @@ function fitCreature(obj, target){
     if (!o.isMesh) return;
     o.frustumCulled = false;
     o.castShadow = false;
-    o.material.polygonOffset = true;
-    o.material.polygonOffsetFactor = -1;
-    o.material.polygonOffsetUnits = -1;
+    const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
+    mats.forEach(m => {
+      m.polygonOffset = true;
+      m.polygonOffsetFactor = -1;
+      m.polygonOffsetUnits = -1;
+    });
   });
   const g = new THREE.Group();
   g.add(obj);
   g.userData.belly = size.y * fitted * 0.5;
+  g.userData.halfLen = Math.max(size.x, size.z) * fitted * 0.42;
+  g.userData.halfSide = Math.min(size.x, size.z) * fitted * 0.38;
   g.userData.longAxis = size.x >= size.z ? 'x' : 'z';
   return g;
 }
 
-function collectSeats(root){
-  root.updateMatrixWorld(true);
-  const best = new Map();
+const seatPrefs = {
+  '長頸鹿.glb': { x: -0.30, y: 0.64, z: 0.08, climb: true, lift: 1.05 },
+  '巴拉望.glb': { x: 0.28, y: 0.60, z: 0.06, climb: true, lift: 1.05 },
+  '巨顎叉角.glb': { x: -0.22, y: 0.42, z: 0.12, climb: true, lift: 1.08 },
+  '戰神大兜.glb': { x: 0.18, y: 0.34, z: 0.10, climb: false, lift: 1.12 },
+  '兔子.glb': { x: -0.08, y: 0.52, z: 0.14, climb: false, lift: 1.1 },
+  '泰坦天牛.glb': { x: 0.06, y: 0.48, z: 0.02, climb: false, lift: 1.08 },
+  '彩虹.glb': { x: -0.32, y: 0.28, z: 0.04, climb: true, lift: 1.05 },
+  '彩虹+藍.glb': { x: 0.30, y: 0.26, z: 0.08, climb: true, lift: 1.05 },
+  '傑森暴龍.glb': { x: 0.22, y: 0.70, z: 0.00, climb: true, lift: 1.05 },
+  '巨人柱.glb': { x: -0.16, y: 0.22, z: 0.16, climb: false, lift: 1.15 },
+  '蠍子.glb': { x: 0.04, y: 0.20, z: 0.18, climb: false, lift: 1.12 }
+};
+
+const groundRay = new THREE.Raycaster();
+const groundOrigin = new THREE.Vector3();
+const groundDir = new THREE.Vector3();
+const groundSide = new THREE.Vector3();
+function seatGrounded(seat){
+  if (!seat.mesh) return false;
+  groundRay.near = 0.01;
+  groundRay.far = 0.5;
+  const reach = boxSize.y * 0.055;
+  groundSide.crossVectors(seat.normal, seat.tangent).normalize();
+  groundDir.copy(seat.normal).negate();
+  const checks = [[0, 0], [reach, 0], [-reach, 0], [0, reach * 0.65], [0, -reach * 0.65]];
+  let hits = 0;
+  for (let i = 0; i < checks.length; i++){
+    groundOrigin.copy(seat.point)
+      .addScaledVector(seat.tangent, checks[i][0])
+      .addScaledVector(groundSide, checks[i][1])
+      .addScaledVector(seat.normal, 0.26);
+    groundRay.set(groundOrigin, groundDir);
+    const hit = groundRay.intersectObject(seat.mesh, false)[0];
+    if (!hit || hit.distance > 0.4) continue;
+    hits += 1;
+  }
+  return hits >= 4;
+}
+
+function scanTankMesh(mesh, into){
+  if (!mesh.isMesh || !mesh.userData.isTankPart || !mesh.geometry) return;
+  const box = new THREE.Box3().setFromObject(mesh);
+  const size = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  box.getSize(size);
+  box.getCenter(center);
+  const dims = [size.x, size.y, size.z].sort((a, b) => a - b);
+  if (dims[2] < boxSize.y * 0.14 || dims[1] < boxSize.y * 0.055) return;
+  const axis = new THREE.Vector3(1, 0, 0);
+  if (size.y >= size.x && size.y >= size.z) axis.set(0, 1, 0);
+  else if (size.z >= size.x && size.z >= size.y) axis.set(0, 0, 1);
+  const pos = mesh.geometry.attributes && mesh.geometry.attributes.position;
+  if (!pos) return;
+  const index = mesh.geometry.index;
+  const triCount = index ? index.count / 3 : pos.count / 3;
+  const step = Math.max(1, Math.floor(triCount / 180));
   const vA = new THREE.Vector3();
   const vB = new THREE.Vector3();
   const vC = new THREE.Vector3();
@@ -137,122 +275,294 @@ function collectSeats(root){
   const e2 = new THREE.Vector3();
   const n = new THREE.Vector3();
   const mid = new THREE.Vector3();
-  const center = new THREE.Vector3();
-  const size = new THREE.Vector3();
-  root.traverse(mesh => {
-    if (!mesh.isMesh || mesh.material === glassMat || !mesh.geometry) return;
-    const box = new THREE.Box3().setFromObject(mesh);
-    box.getSize(size);
-    box.getCenter(center);
-    const longest = Math.max(size.x, size.y, size.z);
-    if (longest < boxSize.y * 0.12) return;
-    const axis = new THREE.Vector3(1, 0, 0);
-    if (size.y >= size.x && size.y >= size.z) axis.set(0, 1, 0);
-    else if (size.z >= size.x && size.z >= size.y) axis.set(0, 0, 1);
-    const pos = mesh.geometry.attributes.position;
-    const index = mesh.geometry.index;
-    const triCount = index ? index.count / 3 : pos.count / 3;
-    const step = Math.max(1, Math.floor(triCount / 160));
-    for (let t = 0; t < triCount; t += step){
-      const i0 = index ? index.getX(t * 3) : t * 3;
-      const i1 = index ? index.getX(t * 3 + 1) : t * 3 + 1;
-      const i2 = index ? index.getX(t * 3 + 2) : t * 3 + 2;
-      vA.fromBufferAttribute(pos, i0).applyMatrix4(mesh.matrixWorld);
-      vB.fromBufferAttribute(pos, i1).applyMatrix4(mesh.matrixWorld);
-      vC.fromBufferAttribute(pos, i2).applyMatrix4(mesh.matrixWorld);
-      e1.subVectors(vB, vA);
-      e2.subVectors(vC, vA);
-      n.crossVectors(e1, e2);
-      const area = n.length() * 0.5;
-      if (area < 2e-5) continue;
-      n.multiplyScalar(1 / (area * 2));
-      const span = Math.max(e1.length(), e2.length(), vB.distanceTo(vC));
-      const altitude = span > 1e-6 ? (area * 2) / span : 0;
-      if (altitude < span * 0.12) continue;
-      mid.copy(vA).add(vB).add(vC).multiplyScalar(1 / 3);
-      const outward = e1.copy(mid).sub(center);
-      if (outward.lengthSq() > 1e-4 && n.dot(outward) < -0.15 * outward.length()) n.negate();
-      if (n.y < 0.18 || n.z < 0.12) continue;
-      if (mid.y < boxSize.y * 0.2 || mid.y > boxSize.y * 0.9) continue;
-      if (Math.abs(mid.x) > boxSize.x * 0.4 || Math.abs(mid.z) > boxSize.z * 0.36) continue;
-      const tangent = axis.clone().addScaledVector(n, -axis.dot(n));
-      if (tangent.lengthSq() < 1e-6) continue;
-      tangent.normalize();
-      const score = Math.sqrt(area) * (0.4 + (1 - Math.abs(n.y - 0.62)));
-      const list = best.get(mesh.uuid) || [];
-      list.push({
-        point: mid.clone(),
-        normal: n.clone(),
-        tangent: tangent.clone(),
-        score: score,
-        mesh: mesh
-      });
-      if (list.length > 10){
-        list.sort((a, b) => b.score - a.score);
-        list.length = 8;
-      }
-      best.set(mesh.uuid, list);
-    }
-  });
-  const pools = Array.from(best.values()).map(list => list.sort((a, b) => b.score - a.score));
-  pools.sort((a, b) => b[0].score - a[0].score);
-  const raycaster = new THREE.Raycaster();
-  raycaster.near = 0.01;
-  raycaster.far = 0.4;
-  const origin = new THREE.Vector3();
-  const dir = new THREE.Vector3();
-  const side = new THREE.Vector3();
-  const reach = boxSize.y * 0.045;
-  function grounded(seat){
-    side.crossVectors(seat.normal, seat.tangent).normalize();
-    dir.copy(seat.normal).negate();
-    const checks = [[0, 0], [reach, 0], [-reach, 0], [0, reach * 0.55], [0, -reach * 0.55]];
-    for (let i = 0; i < checks.length; i++){
-      origin.copy(seat.point)
-        .addScaledVector(seat.tangent, checks[i][0])
-        .addScaledVector(side, checks[i][1])
-        .addScaledVector(seat.normal, 0.18);
-      raycaster.set(origin, dir);
-      if (!raycaster.intersectObject(seat.mesh, false).length) return false;
-    }
-    return true;
-  }
-  const chosen = [];
-  function take(requireGround, maxFlat, gap){
-    let flats = chosen.filter(s => s.normal.y > 0.82).length;
-    pools.forEach(list => {
-      if (chosen.length >= beetles.length) return;
-      const seat = list.find(s => !chosen.includes(s)
-        && chosen.every(c => c.point.distanceTo(s.point) > gap)
-        && !(s.normal.y > 0.82 && flats >= maxFlat)
-        && (!requireGround || grounded(s)));
-      if (!seat) return;
-      chosen.push(seat);
-      if (seat.normal.y > 0.82) flats += 1;
+  const list = [];
+  for (let t = 0; t < triCount; t += step){
+    const i0 = index ? index.getX(t * 3) : t * 3;
+    const i1 = index ? index.getX(t * 3 + 1) : t * 3 + 1;
+    const i2 = index ? index.getX(t * 3 + 2) : t * 3 + 2;
+    vA.fromBufferAttribute(pos, i0).applyMatrix4(mesh.matrixWorld);
+    vB.fromBufferAttribute(pos, i1).applyMatrix4(mesh.matrixWorld);
+    vC.fromBufferAttribute(pos, i2).applyMatrix4(mesh.matrixWorld);
+    e1.subVectors(vB, vA);
+    e2.subVectors(vC, vA);
+    n.crossVectors(e1, e2);
+    const area = n.length() * 0.5;
+    if (area < 2e-5) continue;
+    n.multiplyScalar(1 / (area * 2));
+    const span = Math.max(e1.length(), e2.length(), vB.distanceTo(vC));
+    const altitude = span > 1e-6 ? (area * 2) / span : 0;
+    if (altitude < span * 0.12) continue;
+    mid.copy(vA).add(vB).add(vC).multiplyScalar(1 / 3);
+    const outward = e1.copy(mid).sub(center);
+    if (outward.lengthSq() > 1e-4 && n.dot(outward) < -0.15 * outward.length()) n.negate();
+    if (n.y < -0.2) continue;
+    const facing = Math.max(0, n.z) + Math.abs(n.x) * 0.4;
+    if (facing < 0.08 && n.y < 0.3) continue;
+    if (mid.y < boxSize.y * 0.18 || mid.y > boxSize.y * 0.92) continue;
+    if (Math.abs(mid.x) > boxSize.x * 0.42 || Math.abs(mid.z) > boxSize.z * 0.38) continue;
+    let tangent = axis.clone().addScaledVector(n, -axis.dot(n));
+    if (tangent.lengthSq() < 1e-6) tangent = new THREE.Vector3(0, 1, 0).addScaledVector(n, -n.y);
+    if (tangent.lengthSq() < 1e-6) continue;
+    tangent.normalize();
+    if (tangent.y < 0) tangent.negate();
+    const climb = 1 - Math.abs(n.y);
+    const rest = Math.max(0, n.y);
+    const score = Math.sqrt(area) * (0.4 + climb * 0.75 + rest * 0.35) + facing * 0.3;
+    list.push({
+      point: mid.clone(),
+      normal: n.clone(),
+      tangent: tangent.clone(),
+      score: score,
+      mesh: mesh
     });
   }
-  const wide = boxSize.x * 0.16;
-  take(true, Math.ceil(beetles.length / 3), wide);
-  if (chosen.length < beetles.length) take(true, beetles.length, boxSize.x * 0.1);
-  if (chosen.length < beetles.length) take(false, beetles.length, boxSize.x * 0.08);
-  return chosen.slice(0, beetles.length);
+  list.sort((a, b) => b.score - a.score);
+  into.push(...list.slice(0, 8));
+}
+
+function scanTankSurfaces(root){
+  return new Promise((resolve) => {
+    root.updateMatrixWorld(true);
+    const parts = tankMeshes.slice();
+    const raw = [];
+    let i = 0;
+    showStatus('DETECTING  0 / ' + parts.length);
+    function step(){
+      const start = performance.now();
+      while (i < parts.length && performance.now() - start < 16){
+        scanTankMesh(parts[i], raw);
+        i += 1;
+      }
+      showStatus('DETECTING  ' + i + ' / ' + parts.length);
+      if (i < parts.length){
+        requestAnimationFrame(step);
+        return;
+      }
+      showStatus('VERIFYING  0 / ' + raw.length);
+      const grounded = [];
+      let g = 0;
+      function groundStep(){
+        const start = performance.now();
+        while (g < raw.length && performance.now() - start < 16){
+          if (seatGrounded(raw[g])) grounded.push(raw[g]);
+          g += 1;
+        }
+        showStatus('VERIFYING  ' + g + ' / ' + raw.length);
+        if (g < raw.length){
+          requestAnimationFrame(groundStep);
+          return;
+        }
+        grounded.sort((a, b) => b.score - a.score);
+        seatCatalog = grounded;
+        resolve(grounded);
+      }
+      requestAnimationFrame(groundStep);
+    }
+    requestAnimationFrame(step);
+  });
+}
+
+function makeTangent(normal){
+  const axis = Math.abs(normal.y) < 0.85
+    ? new THREE.Vector3(0, 1, 0)
+    : new THREE.Vector3(1, 0, 0);
+  const tangent = axis.clone().addScaledVector(normal, -axis.dot(normal));
+  if (tangent.lengthSq() < 1e-6) return new THREE.Vector3(1, 0, 0);
+  tangent.normalize();
+  if (tangent.y < 0) tangent.negate();
+  return tangent;
+}
+
+function raySeatNear(aim, wantClimb){
+  if (!tankMeshes.length) return null;
+  const ray = new THREE.Raycaster();
+  ray.far = Math.max(boxSize.x, boxSize.y, boxSize.z) * 1.5;
+  const candidates = [];
+  const addHits = (origin, dir, loose) => {
+    if (dir.lengthSq() < 1e-8) return;
+    ray.set(origin, dir.clone().normalize());
+    const hits = ray.intersectObjects(tankMeshes, false);
+    for (let i = 0; i < Math.min(hits.length, 5); i++){
+      const hit = hits[i];
+      if (hit.object.userData.isFrame || hit.object.userData.isGlass) continue;
+      if (hit.point.z > boxSize.z * 0.2) continue;
+      if (hit.point.y < boxSize.y * 0.16 || hit.point.y > boxSize.y * 0.9) continue;
+      if (Math.abs(hit.point.x) > boxSize.x * 0.45) continue;
+      const normal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize();
+      const toRay = new THREE.Vector3().subVectors(origin, hit.point);
+      if (normal.dot(toRay) < 0) normal.negate();
+      if (normal.y < -0.25) continue;
+      if (!loose && wantClimb && normal.y > 0.75) continue;
+      if (!loose && !wantClimb && normal.y < 0.15) continue;
+      const dist = hit.point.distanceTo(aim);
+      let score = 4.2 - dist / (boxSize.y * 0.36);
+      score += Math.max(0, 0.16 - Math.abs(hit.point.z)) * 2.4;
+      score += Math.max(0, normal.z) * 0.3;
+      if (wantClimb) score += (1 - Math.abs(normal.y - 0.25)) * 1.2;
+      else score += Math.max(0, normal.y) * 1.25;
+      candidates.push({
+        point: hit.point.clone(),
+        normal: normal,
+        tangent: makeTangent(normal),
+        score: score,
+        mesh: hit.object
+      });
+    }
+  };
+
+  const side = Math.abs(aim.x) < 0.04 ? 1 : Math.sign(aim.x);
+  // Cast from the open center of the tank toward each zone.
+  const origins = [
+    new THREE.Vector3(0, aim.y, boxSize.z * 0.06),
+    new THREE.Vector3(aim.x * 0.2, aim.y + boxSize.y * 0.05, boxSize.z * 0.04),
+    new THREE.Vector3(aim.x * 0.2, aim.y - boxSize.y * 0.05, boxSize.z * 0.04),
+    new THREE.Vector3(-side * boxSize.x * 0.08, aim.y, 0),
+    new THREE.Vector3(aim.x, aim.y + boxSize.y * 0.34, 0),
+    new THREE.Vector3(aim.x, aim.y + boxSize.y * 0.22, boxSize.z * 0.02),
+    new THREE.Vector3(aim.x + side * boxSize.x * 0.08, aim.y + boxSize.y * 0.18, -boxSize.z * 0.02)
+  ];
+  origins.forEach(origin => {
+    addHits(origin, new THREE.Vector3(aim.x - origin.x, aim.y - origin.y, aim.z - origin.z - boxSize.z * 0.04), false);
+  });
+  if (!candidates.length){
+    origins.forEach(origin => {
+      addHits(origin, new THREE.Vector3(aim.x - origin.x, aim.y - origin.y, aim.z - origin.z), true);
+    });
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates[0] || null;
+}
+
+function pickSeatsForBeetles(){
+  const need = beetles.length;
+  const chosen = [];
+  const gap = boxSize.x * 0.17;
+  const zones = [
+    { x: -0.30, y: 0.64, z: 0.08, climb: true },
+    { x: 0.28, y: 0.60, z: 0.06, climb: true },
+    { x: -0.22, y: 0.42, z: 0.12, climb: true },
+    { x: 0.18, y: 0.34, z: 0.10, climb: false },
+    { x: -0.08, y: 0.52, z: 0.14, climb: false },
+    { x: 0.06, y: 0.48, z: 0.02, climb: false },
+    { x: -0.32, y: 0.28, z: 0.04, climb: true },
+    { x: 0.30, y: 0.26, z: 0.08, climb: true },
+    { x: 0.22, y: 0.70, z: 0.00, climb: true },
+    { x: -0.16, y: 0.22, z: 0.16, climb: false },
+    { x: 0.04, y: 0.20, z: 0.18, climb: false }
+  ];
+
+  beetles.forEach((spec, i) => {
+    const pref = seatPrefs[spec.model] || zones[i % zones.length];
+    const zone = zones[i % zones.length];
+    const aim = new THREE.Vector3(
+      (pref.x != null ? pref.x : zone.x) * boxSize.x,
+      (pref.y != null ? pref.y : zone.y) * boxSize.y,
+      (pref.z != null ? pref.z : zone.z) * boxSize.z
+    );
+    const wantClimb = pref.climb != null ? pref.climb : !!zone.climb;
+    const aims = [
+      aim,
+      aim.clone().add(new THREE.Vector3(boxSize.x * 0.04, boxSize.y * 0.03, -boxSize.z * 0.02)),
+      aim.clone().add(new THREE.Vector3(-boxSize.x * 0.04, -boxSize.y * 0.03, -boxSize.z * 0.02))
+    ];
+    let seat = null;
+    for (let a = 0; a < aims.length && !seat; a++){
+      seat = raySeatNear(aims[a], wantClimb);
+      if (seat && chosen.some(c => c.point.distanceTo(seat.point) < gap)) seat = null;
+    }
+    for (let a = 0; a < aims.length && !seat; a++){
+      seat = raySeatNear(aims[a], !wantClimb);
+      if (seat && chosen.some(c => c.point.distanceTo(seat.point) < gap * 0.75)) seat = null;
+    }
+    if (!seat){
+      let best = null;
+      let bestScore = -1e9;
+      seatCatalog.forEach(s => {
+        if (s.point.z > boxSize.z * 0.18) return;
+        if (chosen.some(c => c.point.distanceTo(s.point) < gap * 0.7)) return;
+        const dist = s.point.distanceTo(aim);
+        const score = s.score - dist * 0.9 - Math.abs(s.point.z) * 1.2;
+        if (score > bestScore){
+          bestScore = score;
+          best = s;
+        }
+      });
+      seat = best;
+    }
+    if (seat) chosen.push(seat);
+  });
+  return chosen.slice(0, need);
 }
 
 const sitX = new THREE.Vector3();
 const sitZ = new THREE.Vector3();
 const sitM = new THREE.Matrix4();
-function sitOn(group, seat){
+const sitRay = new THREE.Raycaster();
+const sitOrigin = new THREE.Vector3();
+const sitDir = new THREE.Vector3();
+const sitNormal = new THREE.Vector3();
+function orientOn(group, normal, tangent){
+  sitNormal.copy(normal).normalize();
+  let tan = tangent.clone().addScaledVector(sitNormal, -tangent.dot(sitNormal));
+  if (tan.lengthSq() < 1e-6) tan.set(0, 1, 0).addScaledVector(sitNormal, -sitNormal.y);
+  tan.normalize();
+  if (tan.y < -0.05) tan.negate();
   if (group.userData.longAxis === 'z'){
-    sitX.crossVectors(seat.normal, seat.tangent).normalize();
-    sitZ.crossVectors(sitX, seat.normal).normalize();
+    sitX.crossVectors(sitNormal, tan).normalize();
+    sitZ.crossVectors(sitX, sitNormal).normalize();
   } else {
-    sitX.copy(seat.tangent);
-    sitZ.crossVectors(seat.normal, sitX).normalize();
-    sitX.crossVectors(sitZ, seat.normal).normalize();
+    sitX.copy(tan);
+    sitZ.crossVectors(sitNormal, sitX).normalize();
+    sitX.crossVectors(sitZ, sitNormal).normalize();
   }
-  sitM.makeBasis(sitX, seat.normal, sitZ);
+  sitM.makeBasis(sitX, sitNormal, sitZ);
   group.quaternion.setFromRotationMatrix(sitM);
-  group.position.copy(seat.point).addScaledVector(seat.normal, group.userData.belly);
+}
+function sitOn(group, seat){
+  sitNormal.copy(seat.normal).normalize();
+  orientOn(group, sitNormal, seat.tangent);
+  const lift = Math.max(
+    group.userData.belly * (Math.abs(sitNormal.y) > 0.55 ? 1.35 : 1.2),
+    boxSize.y * 0.016
+  );
+  const meshes = tankMeshes.length ? tankMeshes : (seat.mesh ? [seat.mesh] : []);
+  sitOrigin.copy(seat.point).addScaledVector(sitNormal, Math.max(0.55, lift * 3.2));
+  sitDir.copy(sitNormal).negate();
+  sitRay.near = 0.001;
+  sitRay.far = Math.max(1.4, lift * 7);
+  sitRay.set(sitOrigin, sitDir);
+  const hit = meshes.length ? sitRay.intersectObjects(meshes, false)[0] : null;
+  const anchor = hit ? hit.point : seat.point;
+  if (hit && hit.face){
+    const hn = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize();
+    if (hn.dot(sitNormal) < 0) hn.negate();
+    if (hn.dot(seat.normal) > 0.72){
+      sitNormal.copy(hn);
+      orientOn(group, sitNormal, seat.tangent);
+    }
+  }
+  group.position.copy(anchor).addScaledVector(sitNormal, lift);
+
+  const halfL = group.userData.halfLen || lift;
+  const halfS = group.userData.halfSide || lift * 0.45;
+  const side = new THREE.Vector3().crossVectors(sitNormal, sitX).normalize();
+  const samples = [[0, 0], [halfL, 0], [-halfL, 0], [0, halfS], [0, -halfS], [halfL * 0.55, halfS * 0.45], [-halfL * 0.55, -halfS * 0.45]];
+  let extra = 0;
+  for (let i = 0; i < samples.length; i++){
+    sitOrigin.copy(group.position)
+      .addScaledVector(sitX, samples[i][0])
+      .addScaledVector(side, samples[i][1])
+      .addScaledVector(sitNormal, lift * 1.1);
+    sitDir.copy(sitNormal).negate();
+    sitRay.far = lift * 2.8;
+    sitRay.set(sitOrigin, sitDir);
+    const sink = meshes.length ? sitRay.intersectObjects(meshes, false)[0] : null;
+    if (sink && sink.distance < lift){
+      extra = Math.max(extra, lift - sink.distance);
+    }
+  }
+  if (extra > 0) group.position.addScaledVector(sitNormal, extra + lift * 0.06);
 }
 
 const glassMat = new THREE.MeshStandardMaterial({
@@ -267,13 +577,53 @@ const glassMat = new THREE.MeshStandardMaterial({
 
 function panelLike(mesh){
   const geo = mesh.geometry;
+  if (!geo) return false;
   if (!geo.boundingBox) geo.computeBoundingBox();
+  if (!geo.boundingBox) return false;
   const s = new THREE.Vector3();
   geo.boundingBox.getSize(s);
   const dims = [s.x, s.y, s.z].sort((a, b) => a - b);
-  return dims[0] < dims[2] * 0.045 && dims[2] > 0.08;
+  return (dims[0] < dims[2] * 0.045 && dims[2] > 0.08) || (dims[0] < 0.012 && dims[1] > 0.15 && dims[2] > 0.15);
 }
 
+function isFrameOrBase(mesh){
+  const box = new THREE.Box3().setFromObject(mesh);
+  const c = new THREE.Vector3();
+  const s = new THREE.Vector3();
+  box.getCenter(c);
+  box.getSize(s);
+  const dims = [s.x, s.y, s.z].sort((a, b) => a - b);
+  if (c.y < boxSize.y * 0.14 && s.x > boxSize.x * 0.45 && s.z > boxSize.z * 0.35) return true;
+  if (c.y > boxSize.y * 0.86 && s.x > boxSize.x * 0.4) return true;
+  if (dims[0] < boxSize.y * 0.035 && dims[2] > boxSize.x * 0.28) return true;
+  if (c.z > boxSize.z * 0.28 && dims[0] < boxSize.y * 0.05 && s.x > boxSize.x * 0.25) return true;
+  return false;
+}
+
+function classifyTankPart(mesh){
+  const box = new THREE.Box3().setFromObject(mesh);
+  const c = new THREE.Vector3();
+  const s = new THREE.Vector3();
+  box.getCenter(c);
+  box.getSize(s);
+  const dims = [s.x, s.y, s.z].sort((a, b) => a - b);
+  const ny = c.y / Math.max(boxSize.y, 1e-6);
+  const nx = c.x / Math.max(boxSize.x * 0.5, 1e-6);
+  const thinRatio = dims[0] / Math.max(dims[2], 1e-6);
+  if (panelLike(mesh) || thinRatio < 0.045) return 'glass';
+  if (isFrameOrBase(mesh)) return ny > 0.8 ? 'lid' : (ny < 0.2 ? 'base' : 'frame');
+  if (s.y > boxSize.y * 0.32 && Math.max(s.x, s.z) > boxSize.x * 0.12){
+    if (nx < -0.18) return 'trunk_left';
+    if (nx > 0.18) return 'trunk_right';
+    return 'trunk';
+  }
+  if (ny < 0.28 && Math.max(s.x, s.z) > boxSize.x * 0.1) return 'ground';
+  if (dims[0] < boxSize.y * 0.035 && dims[2] > boxSize.y * 0.08) return 'vine';
+  if (s.y < boxSize.y * 0.22 && Math.max(s.x, s.z) > boxSize.x * 0.12) return 'branch';
+  return 'detail';
+}
+
+showStatus('LOADING TANK');
 loadGLB('生態箱.glb').then((gltf) => {
   const obj = gltf.scene;
   obj.traverse(o => {
@@ -282,8 +632,12 @@ loadGLB('生態箱.glb').then((gltf) => {
     if (panelLike(o)){
       o.material = glassMat;
       o.renderOrder = 2;
+      o.userData.isTankPart = false;
+      o.userData.isGlass = true;
+      o.userData.part = 'glass';
     } else if (o.material){
       o.material.side = THREE.DoubleSide;
+      o.userData.isTankPart = true;
     }
   });
   const bounds = new THREE.Box3().setFromObject(obj);
@@ -291,6 +645,7 @@ loadGLB('生態箱.glb').then((gltf) => {
   const center = new THREE.Vector3();
   bounds.getSize(size);
   bounds.getCenter(center);
+  if (!(size.y > 0)) throw new Error('生態箱尺寸無效');
   obj.position.sub(center);
   const wrap = new THREE.Group();
   wrap.add(obj);
@@ -301,6 +656,29 @@ loadGLB('生態箱.glb').then((gltf) => {
   scene.add(wrap);
   boxMesh = wrap;
   boxSize.set(size.x * s, height, size.z * s);
+  tankMeshes = [];
+  const partCounts = {};
+  wrap.updateMatrixWorld(true);
+  wrap.traverse(o => {
+    if (!o.isMesh) return;
+    if (o.userData.isGlass){
+      partCounts.glass = (partCounts.glass || 0) + 1;
+      return;
+    }
+    const part = classifyTankPart(o);
+    o.userData.part = part;
+    if (part === 'glass' || part === 'lid' || part === 'base' || part === 'frame'){
+      o.userData.isTankPart = false;
+      o.userData.isFrame = part !== 'glass';
+      partCounts[part] = (partCounts[part] || 0) + 1;
+      return;
+    }
+    o.userData.isTankPart = true;
+    tankMeshes.push(o);
+    partCounts[part] = (partCounts[part] || 0) + 1;
+  });
+  window.SKELIO_TANK_PARTS = partCounts;
+  console.log('生態箱部位', partCounts);
 
   const front = boxSize.z * 0.5;
   coverPos.set(0, boxSize.y * 0.5, front + boxSize.y * 1.65);
@@ -308,52 +686,154 @@ loadGLB('生態箱.glb').then((gltf) => {
   lookCover.set(0, boxSize.y * 0.46, 0);
   lookInside.set(0, boxSize.y * 0.44, -boxSize.z * 0.08);
   focus.set(0, boxSize.y * 0.46, 0);
-  const aim = new THREE.Vector3().subVectors(lookInside, insidePos);
-  targetPitch = pitch = Math.atan2(aim.y, Math.hypot(aim.x, aim.z));
+  const offset = new THREE.Vector3().subVectors(insidePos, focus);
+  radius = targetRadius = offset.length();
+  radiusMin = Math.max(boxSize.y * 0.7, Math.min(boxSize.x, boxSize.z) * 0.85);
+  radiusMax = Math.max(boxSize.y * 3.4, radius * 1.85);
+  orbitYaw = targetOrbitYaw = Math.atan2(offset.x, offset.z);
+  orbitPitch = targetOrbitPitch = Math.asin(Math.max(-0.95, Math.min(0.95, offset.y / radius)));
   camera.position.copy(coverPos);
   camera.lookAt(lookCover);
-  seats = collectSeats(wrap);
-  phase = 'cover';
-  document.getElementById('open').classList.add('ready');
+  phase = 'detecting';
+  return scanTankSurfaces(wrap).then((catalog) => {
+    seats = pickSeatsForBeetles();
+    tankReady = seats.length > 0;
+    phase = 'cover';
+    if (!tankReady){
+      showStatus('偵測失敗');
+      return;
+    }
+    showStatus('READY  ' + seats.length + ' SEATS');
+    setTimeout(() => {
+      if (statusEl.textContent.indexOf('READY') === 0) statusEl.classList.remove('on');
+    }, 1400);
+    const openBtn = document.getElementById('open');
+    if (openBtn) openBtn.classList.add('ready');
+  });
 }).catch((err) => {
   console.error('生態箱模型載入失敗', err);
-  statusEl.textContent = '載入失敗';
-  statusEl.classList.add('on');
+  showStatus(loadFailText());
 });
 
 function placeBeetles(){
-  const target = boxSize.y * 0.12;
-  statusEl.textContent = 'LOADING';
-  statusEl.classList.add('on');
-  return Promise.all(beetles.map((spec, i) => loadGLB(spec.model).then((gltf) => {
+  if (!beetles.length){
+    showStatus('沒有可放置的模型');
+    return Promise.resolve();
+  }
+  if (!tankReady || !seats.length){
+    showStatus('生態箱尚未偵測完成');
+    return Promise.resolve();
+  }
+  const target = boxSize.y * 0.095;
+  showStatus('LOADING  0 / ' + beetles.length);
+  let loaded = 0;
+  insectGroups.forEach(g => scene.remove(g));
+  insectGroups = [];
+  const assigned = beetles.map((_, i) => seats[i] || seats[seats.length - 1] || null);
+  return Promise.allSettled(beetles.map((spec, i) => loadGLB(spec.model).then((gltf) => {
+    if (!gltf || !gltf.scene) throw new Error('模型是空的');
     const g = fitCreature(gltf.scene, target);
-    const seat = seats[i] || seats[0];
+    g.userData.isInsect = true;
+    g.userData.spec = spec;
+    const pref = seatPrefs[spec.model];
+    if (pref && pref.lift) g.userData.belly *= pref.lift;
+    const seat = assigned[i];
     if (seat) sitOn(g, seat);
     scene.add(g);
-    statusEl.textContent = 'LOADING  ' + (i + 1) + ' / ' + beetles.length;
-  }))).then(() => {
-    statusEl.textContent = 'DRAG · SCROLL';
-    setTimeout(() => statusEl.classList.remove('on'), 1600);
+    insectGroups.push(g);
+    statusEl.textContent = 'LOADING  ' + (++loaded) + ' / ' + beetles.length;
   }).catch((err) => {
-    console.error('甲蟲模型載入失敗', err);
-    statusEl.textContent = '載入失敗';
-    statusEl.classList.add('on');
+    console.error('甲蟲模型載入失敗', spec.model, err);
+    throw err;
+  }))).then((results) => {
+    const failed = results.filter(result => result.status === 'rejected').length;
+    if (!loaded){
+      showStatus(loadFailText());
+      return;
+    }
+    if (failed){
+      showStatus('已載入 ' + loaded + ' / ' + beetles.length);
+      return;
+    }
+    statusEl.textContent = 'ORBIT · ZOOM';
+    setTimeout(() => statusEl.classList.remove('on'), 1600);
   });
 }
 
+function rememberHomeView(){
+  homeFocus.copy(focus);
+  homeRadius = radius;
+}
+
+function clearFocus(){
+  focusedInsect = null;
+  document.body.classList.remove('focusing');
+  const nameEl = document.getElementById('focusName');
+  if (nameEl) nameEl.textContent = '';
+  focus.copy(homeFocus);
+  targetRadius = Math.max(radiusMin, Math.min(radiusMax, homeRadius));
+}
+
+function focusInsect(group){
+  if (!group) return;
+  focusedInsect = group;
+  document.body.classList.add('focusing');
+  const spec = group.userData.spec || {};
+  const nameEl = document.getElementById('focusName');
+  if (nameEl) nameEl.textContent = (spec.name || '').toUpperCase();
+  const box = new THREE.Box3().setFromObject(group);
+  const center = new THREE.Vector3();
+  const size = new THREE.Vector3();
+  box.getCenter(center);
+  box.getSize(size);
+  focus.copy(center);
+  targetRadius = Math.max(radiusMin, Math.min(radiusMax, Math.max(size.x, size.y, size.z) * 2.8 + boxSize.y * 0.18));
+}
+
+function pickInsect(clientX, clientY){
+  pickNdc.x = (clientX / innerWidth) * 2 - 1;
+  pickNdc.y = -(clientY / innerHeight) * 2 + 1;
+  pickRay.setFromCamera(pickNdc, camera);
+  const meshes = [];
+  insectGroups.forEach(g => g.traverse(o => { if (o.isMesh) meshes.push(o); }));
+  const hits = pickRay.intersectObjects(meshes, false);
+  if (!hits.length) return null;
+  let node = hits[0].object;
+  while (node && !node.userData.isInsect) node = node.parent;
+  return node && node.userData.isInsect ? node : null;
+}
+
 function openBox(){
-  if (phase !== 'cover') return;
+  if (phase !== 'cover' || !tankReady) return;
   phase = 'entering';
   enterStart = performance.now();
   document.body.classList.add('inside');
   placeBeetles();
 }
 
-document.getElementById('open').addEventListener('click', openBox);
+function leaveBox(){
+  if (phase !== 'inside' && phase !== 'entering') return;
+  clearFocus();
+  phase = 'leaving';
+  leaveStart = performance.now();
+  document.body.classList.remove('inside');
+  insectGroups.forEach(g => scene.remove(g));
+  insectGroups = [];
+}
+
+const openButton = document.getElementById('open');
+const backButton = document.getElementById('back');
+const resetButton = document.getElementById('reset');
+if (openButton) openButton.addEventListener('click', openBox);
+if (backButton) backButton.addEventListener('click', leaveBox);
+if (resetButton) resetButton.addEventListener('click', () => {
+  if (phase === 'inside') clearFocus();
+});
 renderer.domElement.addEventListener('pointerdown', (e) => {
   if (phase === 'cover'){ openBox(); return; }
   if (phase !== 'inside') return;
   dragging = true;
+  dragMoved = false;
   lastX = e.clientX;
   lastY = e.clientY;
   velYaw = 0;
@@ -364,43 +844,58 @@ renderer.domElement.addEventListener('pointermove', (e) => {
   if (!dragging) return;
   const dx = e.clientX - lastX;
   const dy = e.clientY - lastY;
+  if (Math.abs(dx) + Math.abs(dy) > 3) dragMoved = true;
   lastX = e.clientX;
   lastY = e.clientY;
-  targetYaw -= dx * 0.005;
-  targetPitch = Math.max(-0.35, Math.min(0.28, targetPitch + dy * 0.003));
+  targetOrbitYaw -= dx * 0.005;
+  targetOrbitPitch = Math.max(-0.12, Math.min(1.28, targetOrbitPitch + dy * 0.0035));
   velYaw = -dx * 0.005;
 });
-function endDrag(){
+function endDrag(e){
+  if (dragging && !dragMoved && phase === 'inside'){
+    const hit = pickInsect(e.clientX, e.clientY);
+    if (hit) focusInsect(hit);
+  }
   dragging = false;
   document.body.classList.remove('dragging');
 }
 renderer.domElement.addEventListener('pointerup', endDrag);
 renderer.domElement.addEventListener('pointercancel', endDrag);
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape'){
+    if (focusedInsect) clearFocus();
+    else if (phase === 'inside') leaveBox();
+  }
+});
 
 renderer.domElement.addEventListener('wheel', (e) => {
   if (phase !== 'inside') return;
   e.preventDefault();
   const line = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1;
-  const step = Math.max(-0.12, Math.min(0.12, e.deltaY * line * 0.0011));
-  targetZoom = Math.max(zoomMin, Math.min(zoomMax, targetZoom + step));
+  const step = Math.max(-0.55, Math.min(0.55, e.deltaY * line * 0.0045));
+  targetRadius = Math.max(radiusMin, Math.min(radiusMax, targetRadius + step));
 }, { passive: false });
 
 const camNow = new THREE.Vector3();
 const lookNow = new THREE.Vector3();
-const viewDir = new THREE.Vector3();
 const insideTone = new THREE.Color(0xe7e3da);
 const coverFov = 32;
-const insideFov = 48;
+const insideFov = 42;
 
-function lookFromEye(){
-  const cy = Math.cos(pitch);
-  viewDir.set(Math.sin(yaw) * cy, Math.sin(pitch), -Math.cos(yaw) * cy);
-  lookNow.copy(camera.position).add(viewDir);
-  camera.lookAt(lookNow);
+function setOrbitCamera(){
+  const cy = Math.cos(orbitPitch);
+  camera.position.set(
+    focus.x + Math.sin(orbitYaw) * cy * radius,
+    focus.y + Math.sin(orbitPitch) * radius,
+    focus.z + Math.cos(orbitYaw) * cy * radius
+  );
+  camera.lookAt(focus);
 }
 
 let t0 = performance.now();
 function tick(now){
+  frameId = requestAnimationFrame(tick);
+  if (contextLost) return;
   const t = (now - t0) / 1000;
   if (boxMesh && phase === 'cover' && !reduce){
     boxMesh.rotation.y = 0.42 + Math.sin(t * 0.35) * 0.06;
@@ -416,29 +911,70 @@ function tick(now){
     camera.updateProjectionMatrix();
     if (boxMesh) boxMesh.rotation.y += (0 - boxMesh.rotation.y) * 0.08;
     scene.background.lerp(insideTone, 0.04);
-    if (u >= 1) phase = 'inside';
+    if (u >= 1){
+      const offset = camera.position.clone().sub(focus);
+      radius = targetRadius = Math.max(radiusMin, offset.length());
+      orbitYaw = targetOrbitYaw = Math.atan2(offset.x, offset.z);
+      orbitPitch = targetOrbitPitch = Math.asin(Math.max(-0.95, Math.min(0.95, offset.y / radius)));
+      rememberHomeView();
+      phase = 'inside';
+    }
+  }
+  if (phase === 'leaving'){
+    const u = Math.min(1, (now - leaveStart) / (reduce ? 1 : 1200));
+    const e = u * u * (3 - 2 * u);
+    camera.position.lerpVectors(insidePos, coverPos, e);
+    lookNow.lerpVectors(homeFocus, lookCover, e);
+    camera.lookAt(lookNow);
+    camera.fov = insideFov + (coverFov - insideFov) * e;
+    camera.updateProjectionMatrix();
+    scene.background.lerp(new THREE.Color(0xf6f5f2), reduce ? 1 : 0.08);
+    if (boxMesh) boxMesh.rotation.y += (0.42 - boxMesh.rotation.y) * 0.06;
+    if (u >= 1){
+      camera.position.copy(coverPos);
+      camera.lookAt(lookCover);
+      camera.fov = coverFov;
+      camera.updateProjectionMatrix();
+      scene.background.set(0xf6f5f2);
+      phase = 'cover';
+    }
   }
   if (phase === 'inside'){
-    if (!dragging && !reduce) targetYaw += velYaw;
-    velYaw *= 0.92;
-    const k = reduce ? 1 : 0.08;
-    yaw += (targetYaw - yaw) * k;
-    pitch += (targetPitch - pitch) * k;
-    zoom += (targetZoom - zoom) * (reduce ? 1 : 0.14);
-    camNow.copy(insidePos).sub(focus).multiplyScalar(zoom).add(focus);
-    camera.position.copy(camNow);
-    lookFromEye();
+    if (!dragging && !reduce) targetOrbitYaw += velYaw;
+    velYaw *= 0.94;
+    const k = reduce ? 1 : 0.1;
+    orbitYaw += (targetOrbitYaw - orbitYaw) * k;
+    orbitPitch += (targetOrbitPitch - orbitPitch) * k;
+    radius += (targetRadius - radius) * (reduce ? 1 : 0.16);
+    setOrbitCamera();
   }
-  renderer.render(scene, camera);
-  requestAnimationFrame(tick);
+  try {
+    renderer.render(scene, camera);
+  } catch (err) {
+    contextLost = true;
+    cancelAnimationFrame(frameId);
+    console.error('畫面更新中斷', err);
+    showStatus('畫面更新中斷');
+  }
 }
 tick(t0);
 
 window.addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight;
+  const height = innerHeight || 1;
+  camera.aspect = innerWidth / height;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
+  renderer.setSize(innerWidth, height);
 });
+}
+
+if (!window.THREE || !THREE.GLTFLoader || !THREE.WebGLRenderer){
+  showStatus('3D 程式庫載入失敗');
+} else if (!window.SKELIO || !Array.isArray(SKELIO.tank)){
+  showStatus('標本資料載入失敗');
+} else {
+  if (location.protocol === 'file:') showStatus('請以 Live Server 開啟，否則無法載入模型');
+  boot();
+}
 </script>
 </body>
 </html>
