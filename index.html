@@ -9,6 +9,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500&family=Noto+Serif+TC:wght@500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js"></script>
 <style>
   :root{
     --ink:#1c1b18;
@@ -16,9 +19,15 @@
     --mute:rgba(28,27,24,.42);
   }
   *{ margin:0; padding:0; box-sizing:border-box; }
-  html,body{ height:100%; background:var(--paper); color:var(--ink); overflow:hidden; }
+  html,body{ min-height:100%; background:var(--paper); color:var(--ink); overflow-x:hidden; overflow-y:hidden; scrollbar-width:none; }
+  html::-webkit-scrollbar, body::-webkit-scrollbar{ display:none; }
+  body.inside{ overflow-y:auto; }
   body{ font-family:'Noto Serif TC', serif; }
-  canvas{ display:block; cursor:pointer; }
+  canvas{ position:fixed; inset:0; z-index:1; display:block; cursor:pointer; }
+  .scroll-track{
+    position:relative; width:1px; height:100vh; pointer-events:none; z-index:0;
+  }
+  body.inside .scroll-track{ height:560vh; }
   body.inside canvas{ cursor:grab; }
   body.inside.dragging canvas{ cursor:grabbing; }
   .mark{
@@ -63,12 +72,89 @@
     max-width:min(78vw, 460px); line-height:1.7; color:var(--mute);
   }
   .status.on{ opacity:1; }
-  .focus-name{
-    position:fixed; left:50%; bottom:8vh; transform:translateX(-50%);
-    font-family:'Cinzel', serif; font-size:11px; letter-spacing:.28em;
-    opacity:0; transition:opacity .45s ease; pointer-events:none; text-align:center;
+  .focus-name{ display:none; }
+  .scroll-hud{
+    position:fixed; left:50%; bottom:26px; transform:translateX(-50%);
+    z-index:3; display:flex; align-items:center; gap:14px;
+    padding:8px 18px; border-radius:999px;
+    background:rgba(255,255,255,0.68); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+    border:1px solid rgba(255,255,255,0.85);
+    box-shadow:0 8px 28px rgba(28,27,24,0.07);
+    opacity:0; pointer-events:none; transition:opacity .45s ease;
+    font-family:'Cinzel', serif; font-size:10px; letter-spacing:.22em; color:var(--ink);
   }
-  body.focusing .focus-name{ opacity:.7; }
+  body.inside .scroll-hud{ opacity:0.9; }
+  .scroll-hud-bar{
+    width:110px; height:3px; border-radius:999px; background:rgba(28,27,24,0.14);
+    overflow:hidden; position:relative;
+  }
+  .scroll-hud-fill{
+    position:absolute; left:0; top:0; bottom:0; width:0%;
+    background:var(--ink); border-radius:999px; transition:width 0.08s linear;
+  }
+  .specimen-card{
+    position:fixed; left:0; top:0; z-index:4;
+    width:min(300px, 84vw); padding:18px 20px 16px;
+    border-radius:22px;
+    background:rgba(255,255,255,0.82);
+    backdrop-filter:blur(22px) saturate(145%);
+    -webkit-backdrop-filter:blur(22px) saturate(145%);
+    border:1px solid rgba(255,255,255,0.92);
+    box-shadow:0 18px 42px rgba(28,27,24,0.12), 0 2px 8px rgba(28,27,24,0.05);
+    color:var(--ink);
+    opacity:0; pointer-events:none;
+    transform:translate3d(-9999px,-9999px,0) scale(0.94);
+    transition:opacity .28s ease, box-shadow .28s ease;
+    cursor:pointer;
+  }
+  .specimen-card.visible{
+    opacity:1; pointer-events:auto;
+    transform:translate3d(var(--card-x, 24px), var(--card-y, 24px), 0) scale(1);
+  }
+  .specimen-card:hover{
+    box-shadow:0 22px 48px rgba(28,27,24,0.18), 0 4px 12px rgba(28,27,24,0.08);
+  }
+  .specimen-card-top{
+    display:flex; justify-content:space-between; align-items:center; gap:8px;
+    font-family:'Cinzel', serif; font-size:10px; letter-spacing:.22em; color:rgba(28,27,24,0.55);
+  }
+  .specimen-card-name{
+    font-size:20px; font-weight:600; margin-top:4px; letter-spacing:.03em;
+  }
+  .specimen-card-latin{
+    font-style:italic; font-size:12px; color:rgba(28,27,24,0.62); margin-top:2px;
+  }
+  .specimen-card-meta{
+    font-size:11px; color:rgba(28,27,24,0.56); margin-top:8px; letter-spacing:.04em;
+  }
+  .specimen-card-summary{
+    font-size:12px; line-height:1.55; color:rgba(28,27,24,0.78); margin-top:8px;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  }
+  .specimen-card-footer{
+    display:flex; justify-content:space-between; align-items:center; margin-top:14px; padding-top:10px;
+    border-top:1px solid rgba(28,27,24,0.08);
+  }
+  .specimen-card-price{
+    font-family:'Cinzel', serif; font-size:14px; font-weight:600; letter-spacing:.08em;
+  }
+  .specimen-card-actions{
+    display:flex; align-items:center; gap:8px;
+  }
+  .card-share-btn{
+    border:1px solid rgba(28,27,24,0.16); background:rgba(255,255,255,0.65);
+    color:var(--ink); border-radius:999px; padding:5px 11px;
+    font-size:11px; font-family:'Noto Serif TC', serif; cursor:pointer;
+    transition:background .2s ease;
+  }
+  .card-share-btn:hover{ background:#fff; }
+  .card-plus-btn{
+    width:32px; height:32px; border-radius:50%; border:0;
+    background:var(--ink); color:#fff; font-size:18px; line-height:1;
+    display:inline-flex; align-items:center; justify-content:center; cursor:pointer;
+    transition:transform .2s ease, background .2s ease;
+  }
+  .card-plus-btn:hover{ transform:scale(1.08); background:#33312b; }
   @media (prefers-reduced-motion: reduce){
     .open span::after{ animation:none; }
   }
@@ -88,8 +174,31 @@
   <button class="reset" id="reset" type="button">RESET</button>
   <button class="back" id="back" type="button">BACK</button>
   <div class="focus-name" id="focusName"></div>
+  <div class="specimen-card" id="specimenCard" role="dialog" aria-label="標本資訊卡">
+    <div class="specimen-card-top">
+      <span id="cardCode">#1000</span>
+      <span id="cardOrigin">ORIGIN</span>
+    </div>
+    <div class="specimen-card-name" id="cardName">標本名稱</div>
+    <div class="specimen-card-latin" id="cardLatin">Latin name</div>
+    <div class="specimen-card-meta" id="cardMeta">體長 —</div>
+    <div class="specimen-card-summary" id="cardSummary"></div>
+    <div class="specimen-card-footer">
+      <div class="specimen-card-price" id="cardPrice">NT$ —</div>
+      <div class="specimen-card-actions">
+        <button class="card-share-btn" id="cardShareBtn" type="button">分享</button>
+        <button class="card-plus-btn" id="cardPlusBtn" type="button" title="查看標本詳情">+</button>
+      </div>
+    </div>
+  </div>
+  <div class="scroll-hud" id="scrollHud">
+    <span id="scrollStageLabel">SCROLL · ORBIT</span>
+    <div class="scroll-hud-bar"><div class="scroll-hud-fill" id="scrollHudFill"></div></div>
+    <span id="scrollPctLabel">0%</span>
+  </div>
   <div class="status" id="status"></div>
 </div>
+<div class="scroll-track" id="scrollTrack" aria-hidden="true"></div>
 <script src="specimens.js"></script>
 <script>
 const statusEl = document.getElementById('status');
@@ -141,11 +250,12 @@ renderer.domElement.addEventListener('webglcontextrestored', () => {
   frameId = requestAnimationFrame(tick);
 });
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.85));
-const key = new THREE.DirectionalLight(0xfff8ee, 0.9);
+scene.add(new THREE.AmbientLight(0xffffff, 0.92));
+scene.add(new THREE.HemisphereLight(0xffffff, 0xe8e4dc, 0.68));
+const key = new THREE.DirectionalLight(0xfff8ee, 0.95);
 key.position.set(3, 6, 4);
 scene.add(key);
-const fill = new THREE.DirectionalLight(0xe7ece4, 0.45);
+const fill = new THREE.DirectionalLight(0xe7ece4, 0.55);
 fill.position.set(-4, 2, -2);
 scene.add(fill);
 
@@ -203,6 +313,8 @@ function fitCreature(obj, target){
       m.polygonOffset = true;
       m.polygonOffsetFactor = -1;
       m.polygonOffsetUnits = -1;
+      if (typeof m.metalness === 'number' && m.metalness > 0.35) m.metalness = 0.35;
+      if (typeof m.roughness === 'number' && m.roughness < 0.32) m.roughness = 0.32;
     });
   });
   const g = new THREE.Group();
@@ -763,9 +875,213 @@ function placeBeetles(){
   });
 }
 
+// --- Scroll-Driven Camera Choreography (GSAP ScrollTrigger + Lenis) + Manual Orbit Coexistence ---
+const cameraPath = Array.isArray(SKELIO.cameraPath) && SKELIO.cameraPath.length ? SKELIO.cameraPath : [
+  { progress: 0.00, yawDelta: 0.00, pitch: 0.34, radiusRatio: 1.00, yOffset:  0.10, label: 'CANOPY OVERVIEW' },
+  { progress: 0.25, yawDelta: 1.57, pitch: 0.22, radiusRatio: 0.78, yOffset:  0.04, label: 'UPPER TRUNK' },
+  { progress: 0.50, yawDelta: 3.14, pitch: 0.12, radiusRatio: 0.64, yOffset: -0.02, label: 'HEART OF TERRARIUM' },
+  { progress: 0.75, yawDelta: 4.71, pitch: 0.18, radiusRatio: 0.74, yOffset: -0.08, label: 'MOSS FLOOR' },
+  { progress: 1.00, yawDelta: 6.283, pitch: 0.28, radiusRatio: 0.95, yOffset:  0.00, label: 'FULL ORBIT' }
+];
+
+let baseHomeYaw = 0;
+let baseHomePitch = 0.22;
+let scrollProgress = 0;
+let userYawOffset = 0;
+let userPitchOffset = 0;
+let userRadiusOffset = 0;
+let lenis = null;
+let scrollTriggerInstance = null;
+
+function sampleCameraPath(p){
+  const clamped = Math.max(0, Math.min(1, p));
+  for (let i = 0; i < cameraPath.length - 1; i++){
+    const a = cameraPath[i];
+    const b = cameraPath[i + 1];
+    if (clamped >= a.progress && clamped <= b.progress){
+      const span = (b.progress - a.progress) || 1;
+      const t = (clamped - a.progress) / span;
+      const s = t * t * (3 - 2 * t);
+      return {
+        yawDelta: a.yawDelta + (b.yawDelta - a.yawDelta) * s,
+        pitch: a.pitch + (b.pitch - a.pitch) * s,
+        radiusRatio: a.radiusRatio + (b.radiusRatio - a.radiusRatio) * s,
+        yOffset: a.yOffset + (b.yOffset - a.yOffset) * s,
+        label: t < 0.5 ? a.label : b.label
+      };
+    }
+  }
+  return cameraPath[cameraPath.length - 1];
+}
+
+const scrollHudFill = document.getElementById('scrollHudFill');
+const scrollPctLabel = document.getElementById('scrollPctLabel');
+const scrollStageLabel = document.getElementById('scrollStageLabel');
+
+function applyScrollChoreography(p){
+  scrollProgress = Math.max(0, Math.min(1, p));
+  const sample = sampleCameraPath(scrollProgress);
+  if (scrollHudFill) scrollHudFill.style.width = Math.round(scrollProgress * 100) + '%';
+  if (scrollPctLabel) scrollPctLabel.textContent = Math.round(scrollProgress * 100) + '%';
+  if (scrollStageLabel && sample.label) scrollStageLabel.textContent = sample.label;
+
+  if (phase !== 'inside' || focusedInsect) return;
+  targetOrbitYaw = baseHomeYaw + sample.yawDelta + userYawOffset;
+  targetOrbitPitch = Math.max(-0.12, Math.min(1.28, sample.pitch + userPitchOffset));
+  const pathRadius = homeRadius * sample.radiusRatio + userRadiusOffset;
+  targetRadius = Math.max(radiusMin, Math.min(radiusMax, pathRadius));
+  focus.set(
+    homeFocus.x,
+    homeFocus.y + sample.yOffset * boxSize.y,
+    homeFocus.z
+  );
+}
+
+function initScrollChoreography(){
+  if (window.Lenis && !lenis){
+    lenis = new Lenis({
+      lerp: reduce ? 1 : 0.085,
+      smoothWheel: true,
+      wheelMultiplier: 0.9
+    });
+    if (window.ScrollTrigger){
+      lenis.on('scroll', ScrollTrigger.update);
+    } else {
+      lenis.on('scroll', (e) => {
+        const maxScroll = Math.max(1, document.documentElement.scrollHeight - innerHeight);
+        applyScrollChoreography((e && typeof e.scroll === 'number' ? e.scroll : window.scrollY) / maxScroll);
+      });
+    }
+  }
+  if (window.gsap && window.ScrollTrigger && !scrollTriggerInstance){
+    gsap.registerPlugin(ScrollTrigger);
+    scrollTriggerInstance = ScrollTrigger.create({
+      trigger: '#scrollTrack',
+      start: 'top top',
+      end: 'bottom bottom',
+      scrub: true,
+      onUpdate: (self) => {
+        applyScrollChoreography(self.progress);
+      }
+    });
+  }
+}
+initScrollChoreography();
+
 function rememberHomeView(){
   homeFocus.copy(focus);
   homeRadius = radius;
+  baseHomeYaw = orbitYaw;
+  baseHomePitch = orbitPitch;
+  userYawOffset = 0;
+  userPitchOffset = 0;
+  userRadiusOffset = 0;
+}
+
+const cardEl = document.getElementById('specimenCard');
+const cardCodeEl = document.getElementById('cardCode');
+const cardOriginEl = document.getElementById('cardOrigin');
+const cardNameEl = document.getElementById('cardName');
+const cardLatinEl = document.getElementById('cardLatin');
+const cardMetaEl = document.getElementById('cardMeta');
+const cardSummaryEl = document.getElementById('cardSummary');
+const cardPriceEl = document.getElementById('cardPrice');
+const cardShareBtn = document.getElementById('cardShareBtn');
+const cardPlusBtn = document.getElementById('cardPlusBtn');
+let activeCardSpec = null;
+const projVec = new THREE.Vector3();
+const groupBox = new THREE.Box3();
+const groupCenter = new THREE.Vector3();
+
+function populateCard(spec){
+  if (!spec || !cardEl) return;
+  if (activeCardSpec === spec) return;
+  activeCardSpec = spec;
+  if (cardCodeEl) cardCodeEl.textContent = spec.code ? '#' + spec.code : '#SKELIO';
+  if (cardOriginEl) cardOriginEl.textContent = spec.origin || 'SPECIMEN';
+  if (cardNameEl) cardNameEl.textContent = spec.name || '';
+  if (cardLatinEl) cardLatinEl.textContent = spec.latin || '';
+  if (cardMetaEl) cardMetaEl.textContent = (spec.size ? '體長 ' + spec.size : '') + (spec.origin ? ' · ' + spec.origin : '');
+  if (cardSummaryEl) cardSummaryEl.textContent = spec.summary || '';
+  if (cardPriceEl) cardPriceEl.textContent = typeof spec.price === 'number' ? 'NT$ ' + spec.price.toLocaleString('en-US') : '典藏洽詢';
+}
+
+function navigateToSpecimen(spec){
+  if (!spec) return;
+  const key = encodeURIComponent(spec.code || spec.name || '');
+  location.href = 'showcase.html?id=' + key;
+}
+
+if (cardEl){
+  cardEl.addEventListener('click', () => {
+    if (activeCardSpec) navigateToSpecimen(activeCardSpec);
+  });
+}
+if (cardPlusBtn){
+  cardPlusBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (activeCardSpec) navigateToSpecimen(activeCardSpec);
+  });
+}
+if (cardShareBtn){
+  cardShareBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!activeCardSpec) return;
+    const shareUrl = new URL('showcase.html?id=' + encodeURIComponent(activeCardSpec.code || activeCardSpec.name || ''), location.href).href;
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        cardShareBtn.textContent = '已複製連結';
+        setTimeout(() => { cardShareBtn.textContent = '分享'; }, 1500);
+      }).catch(() => {});
+    }
+  });
+}
+
+function updateFloatingCard(){
+  if (!cardEl || phase !== 'inside' || !insectGroups.length){
+    if (cardEl) cardEl.classList.remove('visible');
+    return;
+  }
+  let candidate = focusedInsect;
+  if (!candidate){
+    let bestScore = Infinity;
+    const proximityLimit = boxSize.y * 0.92;
+    for (let i = 0; i < insectGroups.length; i++){
+      const g = insectGroups[i];
+      if (!g.visible) continue;
+      groupBox.setFromObject(g);
+      groupBox.getCenter(groupCenter);
+      const dist = camera.position.distanceTo(groupCenter);
+      projVec.copy(groupCenter).project(camera);
+      if (projVec.z < -1 || projVec.z > 1) continue;
+      const screenDist = Math.hypot(projVec.x, projVec.y);
+      if ((dist < proximityLimit || radius < homeRadius * 0.84) && screenDist < 0.42){
+        const score = screenDist * 2.0 + (dist / proximityLimit);
+        if (score < bestScore){
+          bestScore = score;
+          candidate = g;
+        }
+      }
+    }
+  }
+  if (!candidate || !candidate.userData || !candidate.userData.spec){
+    cardEl.classList.remove('visible');
+    activeCardSpec = null;
+    return;
+  }
+  populateCard(candidate.userData.spec);
+  groupBox.setFromObject(candidate);
+  groupBox.getCenter(groupCenter);
+  projVec.copy(groupCenter).project(camera);
+  const rawX = (projVec.x * 0.5 + 0.5) * innerWidth + 28;
+  const rawY = (-projVec.y * 0.5 + 0.5) * innerHeight - 80;
+  const cardW = Math.min(300, innerWidth * 0.84);
+  const cardH = 210;
+  const clampedX = Math.max(16, Math.min(innerWidth - cardW - 16, rawX));
+  const clampedY = Math.max(64, Math.min(innerHeight - cardH - 64, rawY));
+  cardEl.style.setProperty('--card-x', Math.round(clampedX) + 'px');
+  cardEl.style.setProperty('--card-y', Math.round(clampedY) + 'px');
+  cardEl.classList.add('visible');
 }
 
 function clearFocus(){
@@ -773,8 +1089,7 @@ function clearFocus(){
   document.body.classList.remove('focusing');
   const nameEl = document.getElementById('focusName');
   if (nameEl) nameEl.textContent = '';
-  focus.copy(homeFocus);
-  targetRadius = Math.max(radiusMin, Math.min(radiusMax, homeRadius));
+  applyScrollChoreography(scrollProgress);
 }
 
 function focusInsect(group){
@@ -811,17 +1126,24 @@ function openBox(){
   phase = 'entering';
   enterStart = performance.now();
   document.body.classList.add('inside');
-  placeBeetles();
+  if (window.ScrollTrigger) setTimeout(() => ScrollTrigger.refresh(), 60);
+  if (insectGroups.length){
+    insectGroups.forEach(g => { g.visible = true; });
+  } else {
+    placeBeetles();
+  }
 }
 
 function leaveBox(){
   if (phase !== 'inside' && phase !== 'entering') return;
   clearFocus();
+  if (cardEl) cardEl.classList.remove('visible');
   phase = 'leaving';
   leaveStart = performance.now();
   document.body.classList.remove('inside');
-  insectGroups.forEach(g => scene.remove(g));
-  insectGroups = [];
+  if (lenis) lenis.scrollTo(0, { immediate: true });
+  else window.scrollTo(0, 0);
+  insectGroups.forEach(g => { g.visible = false; });
 }
 
 const openButton = document.getElementById('open');
@@ -830,7 +1152,14 @@ const resetButton = document.getElementById('reset');
 if (openButton) openButton.addEventListener('click', openBox);
 if (backButton) backButton.addEventListener('click', leaveBox);
 if (resetButton) resetButton.addEventListener('click', () => {
-  if (phase === 'inside') clearFocus();
+  if (phase === 'inside'){
+    userYawOffset = 0;
+    userPitchOffset = 0;
+    userRadiusOffset = 0;
+    clearFocus();
+    if (lenis) lenis.scrollTo(0);
+    else window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 });
 renderer.domElement.addEventListener('pointerdown', (e) => {
   if (phase === 'cover'){ openBox(); return; }
@@ -850,14 +1179,19 @@ renderer.domElement.addEventListener('pointermove', (e) => {
   if (Math.abs(dx) + Math.abs(dy) > 3) dragMoved = true;
   lastX = e.clientX;
   lastY = e.clientY;
-  targetOrbitYaw -= dx * 0.005;
-  targetOrbitPitch = Math.max(-0.12, Math.min(1.28, targetOrbitPitch + dy * 0.0035));
-  velYaw = -dx * 0.005;
+  const yawStep = -dx * 0.005;
+  const pitchStep = dy * 0.0035;
+  userYawOffset += yawStep;
+  userPitchOffset = Math.max(-0.5, Math.min(0.8, userPitchOffset + pitchStep));
+  targetOrbitYaw += yawStep;
+  targetOrbitPitch = Math.max(-0.12, Math.min(1.28, targetOrbitPitch + pitchStep));
+  velYaw = yawStep;
 });
 function endDrag(e){
   if (dragging && !dragMoved && phase === 'inside'){
     const hit = pickInsect(e.clientX, e.clientY);
     if (hit) focusInsect(hit);
+    else if (focusedInsect) clearFocus();
   }
   dragging = false;
   document.body.classList.remove('dragging');
@@ -871,12 +1205,20 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+// Alt/Ctrl + wheel allows manual radius zoom override; normal wheel drives Lenis + ScrollTrigger camera choreography!
 renderer.domElement.addEventListener('wheel', (e) => {
+  if (phase === 'cover'){
+    if (e.deltaY > 8) openBox();
+    return;
+  }
   if (phase !== 'inside') return;
-  e.preventDefault();
-  const line = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1;
-  const step = Math.max(-0.55, Math.min(0.55, e.deltaY * line * 0.0045));
-  targetRadius = Math.max(radiusMin, Math.min(radiusMax, targetRadius + step));
+  if (e.altKey || e.ctrlKey || focusedInsect){
+    e.preventDefault();
+    const line = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1;
+    const step = Math.max(-0.55, Math.min(0.55, e.deltaY * line * 0.0045));
+    userRadiusOffset += step;
+    targetRadius = Math.max(radiusMin, Math.min(radiusMax, targetRadius + step));
+  }
 }, { passive: false });
 
 const camNow = new THREE.Vector3();
@@ -899,6 +1241,7 @@ let t0 = performance.now();
 function tick(now){
   frameId = requestAnimationFrame(tick);
   if (contextLost) return;
+  if (lenis) lenis.raf(now);
   const t = (now - t0) / 1000;
   if (boxMesh && phase === 'cover' && !reduce){
     boxMesh.rotation.y = 0.42 + Math.sin(t * 0.35) * 0.06;
@@ -921,6 +1264,8 @@ function tick(now){
       orbitPitch = targetOrbitPitch = Math.asin(Math.max(-0.95, Math.min(0.95, offset.y / radius)));
       rememberHomeView();
       phase = 'inside';
+      if (window.ScrollTrigger) ScrollTrigger.refresh();
+      applyScrollChoreography(scrollProgress);
     }
   }
   if (phase === 'leaving'){
@@ -943,13 +1288,17 @@ function tick(now){
     }
   }
   if (phase === 'inside'){
-    if (!dragging && !reduce) targetOrbitYaw += velYaw;
+    if (!dragging && !reduce){
+      userYawOffset += velYaw;
+      targetOrbitYaw += velYaw;
+    }
     velYaw *= 0.94;
     const k = reduce ? 1 : 0.1;
     orbitYaw += (targetOrbitYaw - orbitYaw) * k;
     orbitPitch += (targetOrbitPitch - orbitPitch) * k;
     radius += (targetRadius - radius) * (reduce ? 1 : 0.16);
     setOrbitCamera();
+    updateFloatingCard();
   }
   try {
     renderer.render(scene, camera);
