@@ -846,13 +846,11 @@ function assignTerrariumPBRMaterial(mesh, part){
   const idx = parseInt((mesh.name || '').replace(/\D+/g, ''), 10) || 0;
   let targetMat = null;
   if (part === 'base'){
-    if (avgNy > 0.45){
-      targetMat = (idx % 2 === 0) ? pbrSets.soil : pbrSets.soilAlt;
-    } else {
-      targetMat = (idx % 2 === 0) ? pbrSets.rock : pbrSets.rockAlt;
-    }
-  } else if (part === 'lid' || part === 'frame'){
-    targetMat = (idx % 2 === 0) ? pbrSets.rockAlt : pbrSets.barkAlt;
+    targetMat = pbrSets.rockAlt;
+  } else if (part === 'lid'){
+    targetMat = pbrSets.barkAlt;
+  } else if (part === 'frame'){
+    targetMat = pbrSets.barkAlt;
   } else if (part === 'ground' || (ny < 0.365 && part !== 'trunk' && part !== 'trunk_left' && part !== 'trunk_right')){
     if (avgNy > 0.38){
       targetMat = (idx % 2 === 0) ? pbrSets.leaves : pbrSets.leafCard;
@@ -1087,11 +1085,11 @@ function placeBeetles(){
 
 // --- Scroll-Driven Camera Choreography (GSAP ScrollTrigger + Lenis) + Manual Orbit Coexistence ---
 const cameraPath = Array.isArray(SKELIO.cameraPath) && SKELIO.cameraPath.length ? SKELIO.cameraPath : [
-  { progress: 0.00, yawDelta: 0.00, pitch: 0.34, radiusRatio: 1.00, yOffset:  0.10, label: 'CANOPY OVERVIEW' },
-  { progress: 0.25, yawDelta: 1.57, pitch: 0.22, radiusRatio: 0.78, yOffset:  0.04, label: 'UPPER TRUNK' },
-  { progress: 0.50, yawDelta: 3.14, pitch: 0.12, radiusRatio: 0.64, yOffset: -0.02, label: 'HEART OF TERRARIUM' },
-  { progress: 0.75, yawDelta: 4.71, pitch: 0.18, radiusRatio: 0.74, yOffset: -0.08, label: 'MOSS FLOOR' },
-  { progress: 1.00, yawDelta: 6.283, pitch: 0.28, radiusRatio: 0.95, yOffset:  0.00, label: 'FULL ORBIT' }
+  { p: 0.00, yaw: 0.00, pitch: 0.34, radiusRatio: 1.00, heightOffset:  0.10, label: 'CANOPY OVERVIEW' },
+  { p: 0.25, yaw: 1.57, pitch: 0.22, radiusRatio: 0.78, heightOffset:  0.04, label: 'UPPER TRUNK' },
+  { p: 0.50, yaw: 3.14, pitch: 0.12, radiusRatio: 0.64, heightOffset: -0.02, label: 'HEART OF TERRARIUM' },
+  { p: 0.75, yaw: 4.71, pitch: 0.18, radiusRatio: 0.74, heightOffset: -0.08, label: 'MOSS FLOOR' },
+  { p: 1.00, yaw: 6.283, pitch: 0.28, radiusRatio: 0.95, heightOffset:  0.00, label: 'FULL ORBIT' }
 ];
 
 let baseHomeYaw = 0;
@@ -1108,15 +1106,15 @@ function sampleCameraPath(p){
   for (let i = 0; i < cameraPath.length - 1; i++){
     const a = cameraPath[i];
     const b = cameraPath[i + 1];
-    if (clamped >= a.progress && clamped <= b.progress){
-      const span = (b.progress - a.progress) || 1;
-      const t = (clamped - a.progress) / span;
+    if (clamped >= a.p && clamped <= b.p){
+      const span = (b.p - a.p) || 1;
+      const t = (clamped - a.p) / span;
       const s = t * t * (3 - 2 * t);
       return {
-        yawDelta: a.yawDelta + (b.yawDelta - a.yawDelta) * s,
+        yaw: a.yaw + (b.yaw - a.yaw) * s,
         pitch: a.pitch + (b.pitch - a.pitch) * s,
         radiusRatio: a.radiusRatio + (b.radiusRatio - a.radiusRatio) * s,
-        yOffset: a.yOffset + (b.yOffset - a.yOffset) * s,
+        heightOffset: a.heightOffset + (b.heightOffset - a.heightOffset) * s,
         label: t < 0.5 ? a.label : b.label
       };
     }
@@ -1136,13 +1134,13 @@ function applyScrollChoreography(p){
   if (scrollStageLabel && sample.label) scrollStageLabel.textContent = sample.label;
 
   if (phase !== 'inside' || focusedInsect) return;
-  targetOrbitYaw = baseHomeYaw + sample.yawDelta + userYawOffset;
+  targetOrbitYaw = baseHomeYaw + sample.yaw + userYawOffset;
   targetOrbitPitch = Math.max(-0.12, Math.min(1.28, sample.pitch + userPitchOffset));
   const pathRadius = homeRadius * sample.radiusRatio + userRadiusOffset;
   targetRadius = Math.max(radiusMin, Math.min(radiusMax, pathRadius));
   focus.set(
     homeFocus.x,
-    homeFocus.y + sample.yOffset * boxSize.y,
+    homeFocus.y + sample.heightOffset * boxSize.y,
     homeFocus.z
   );
 }
