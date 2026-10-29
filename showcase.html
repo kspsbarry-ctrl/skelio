@@ -207,31 +207,46 @@ rim.position.set(0.4, 0.2, 1);
 scene.add(camera);
 
 const scTexLoader = new THREE.TextureLoader();
-function loadScTex(url, rep, isColor){
-  const t = scTexLoader.load(url);
+const canLoadScTex = (typeof location !== 'undefined' && location.protocol !== 'file:');
+function loadScTex(url, rep, isColor, onDone){
+  if (!canLoadScTex) return null;
+  const t = scTexLoader.load(url, (loaded) => {
+    if (onDone) onDone(loaded);
+  });
   t.wrapS = THREE.RepeatWrapping;
   t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(rep, rep);
   if (isColor) t.encoding = THREE.sRGBEncoding;
   return t;
 }
-const groundMossColor = loadScTex('textures/Moss002/Moss002_4K-JPG_Color.jpg', 4, true);
-const groundMossNormal = loadScTex('textures/Moss002/Moss002_4K-JPG_NormalGL.jpg', 4, false);
-const groundMossRough = loadScTex('textures/Moss002/Moss002_4K-JPG_Roughness.jpg', 4, false);
-const groundSoilRough = loadScTex('textures/Ground054/Ground054_4K-JPG_Roughness.jpg', 4, false);
+
+const groundMat = new THREE.MeshStandardMaterial({
+  color: 0x5c6e4e,
+  bumpScale: 0.02,
+  roughness: 0.95,
+  metalness: 0.02
+});
+loadScTex('textures/Moss002/Moss002_4K-JPG_Color.jpg', 4, true, (tex) => {
+  groundMat.color.setHex(0xffffff);
+  groundMat.map = tex;
+  groundMat.needsUpdate = true;
+});
+loadScTex('textures/Moss002/Moss002_4K-JPG_NormalGL.jpg', 4, false, (tex) => {
+  groundMat.normalMap = tex;
+  groundMat.needsUpdate = true;
+});
+loadScTex('textures/Moss002/Moss002_4K-JPG_Roughness.jpg', 4, false, (tex) => {
+  groundMat.roughnessMap = tex;
+  groundMat.needsUpdate = true;
+});
+loadScTex('textures/Ground054/Ground054_4K-JPG_Roughness.jpg', 4, false, (tex) => {
+  groundMat.bumpMap = tex;
+  groundMat.needsUpdate = true;
+});
 
 const ground = new THREE.Mesh(
   new THREE.CircleGeometry(9.5, 64),
-  new THREE.MeshStandardMaterial({
-    color: 0x8ea082,
-    map: groundMossColor,
-    normalMap: groundMossNormal,
-    roughnessMap: groundMossRough,
-    bumpMap: groundSoilRough,
-    bumpScale: 0.02,
-    roughness: 0.95,
-    metalness: 0.02
-  })
+  groundMat
 );
 ground.rotation.x = -Math.PI/2;
 ground.position.y = -1.70;
@@ -239,17 +254,24 @@ scene.add(ground);
 
 // 已移除 addLeaf 背景深色剪影幾何體，保持生態缸單品舞台純淨
 
-const glassRoughTex = loadScTex('textures/SurfaceImperfections003/SurfaceImperfections003_4K-JPG_Color.jpg', 2, false);
-const glassNormalTex = loadScTex('textures/SurfaceImperfections003/SurfaceImperfections003_4K-JPG_NormalGL.jpg', 2, false);
+const scGlassMat = new THREE.MeshPhysicalMaterial({
+  color:0xdde8d4, transparent:true, opacity:0.09,
+  roughness:0.18,
+  normalScale:new THREE.Vector2(0.08, 0.08),
+  metalness:0, transmission:0.6, thickness:0.4,
+  side:THREE.DoubleSide
+});
+loadScTex('textures/SurfaceImperfections003/SurfaceImperfections003_4K-JPG_Color.jpg', 2, false, (tex) => {
+  scGlassMat.roughnessMap = tex;
+  scGlassMat.needsUpdate = true;
+});
+loadScTex('textures/SurfaceImperfections003/SurfaceImperfections003_4K-JPG_NormalGL.jpg', 2, false, (tex) => {
+  scGlassMat.normalMap = tex;
+  scGlassMat.needsUpdate = true;
+});
 const glass = new THREE.Mesh(
   new THREE.BoxGeometry(14, 7.2, 11),
-  new THREE.MeshPhysicalMaterial({
-    color:0xdde8d4, transparent:true, opacity:0.09,
-    roughness:0.18, roughnessMap:glassRoughTex,
-    normalMap:glassNormalTex, normalScale:new THREE.Vector2(0.08, 0.08),
-    metalness:0, transmission:0.6, thickness:0.4,
-    side:THREE.DoubleSide
-  })
+  scGlassMat
 );
 glass.position.y = 0.7;
 scene.add(glass);

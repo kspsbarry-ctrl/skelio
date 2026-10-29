@@ -717,8 +717,12 @@ function sitOn(group, seat){
 }
 
 const texLoader = new THREE.TextureLoader();
-function loadTiledTex(url, repeatX, repeatY, isColor){
-  const t = texLoader.load(url);
+const canLoadExternalTex = (typeof location !== 'undefined' && location.protocol !== 'file:');
+function loadTiledTex(url, repeatX, repeatY, isColor, onDone){
+  if (!canLoadExternalTex) return null;
+  const t = texLoader.load(url, (loaded) => {
+    if (onDone) onDone(loaded);
+  });
   t.wrapS = THREE.RepeatWrapping;
   t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(repeatX || 2, repeatY || 2);
@@ -726,82 +730,69 @@ function loadTiledTex(url, repeatX, repeatY, isColor){
   return t;
 }
 
+function makePBRSet(name, diffUrl, norUrl, roughUrl, rx, ry, roughVal, metalVal){
+  const mat = new THREE.MeshStandardMaterial({
+    name: name,
+    roughness: roughVal,
+    metalness: metalVal,
+    side: THREE.DoubleSide
+  });
+  mat.userData = { loaded4K: false, pendingMeshes: [] };
+  if (canLoadExternalTex){
+    loadTiledTex(diffUrl, rx, ry, true, (tex) => {
+      mat.map = tex;
+      mat.needsUpdate = true;
+      mat.userData.loaded4K = true;
+      const list = mat.userData.pendingMeshes.splice(0);
+      for (let i = 0; i < list.length; i++){
+        const m = list[i];
+        ensureTriplanarBoxUVs(m.geometry, m.matrixWorld, 0.72);
+        m.material = mat;
+      }
+    });
+    loadTiledTex(norUrl, rx, ry, false, (tex) => {
+      mat.normalMap = tex;
+      mat.needsUpdate = true;
+    });
+    loadTiledTex(roughUrl, rx, ry, false, (tex) => {
+      mat.roughnessMap = tex;
+      mat.needsUpdate = true;
+    });
+  }
+  return mat;
+}
+
 const pbrSets = {
-  moss: new THREE.MeshStandardMaterial({
-    map: loadTiledTex('textures/moss_01/moss_01_diff_4k.jpg', 2.5, 2.5, true),
-    normalMap: loadTiledTex('textures/moss_01/moss_01_nor_gl_4k.jpg', 2.5, 2.5, false),
-    roughnessMap: loadTiledTex('textures/moss_01/moss_01_rough_4k.jpg', 2.5, 2.5, false),
-    roughness: 0.92, metalness: 0.02, side: THREE.DoubleSide
-  }),
-  mossAlt: new THREE.MeshStandardMaterial({
-    map: loadTiledTex('textures/Moss002/Moss002_4K-JPG_Color.jpg', 2.8, 2.8, true),
-    normalMap: loadTiledTex('textures/Moss002/Moss002_4K-JPG_NormalGL.jpg', 2.8, 2.8, false),
-    roughnessMap: loadTiledTex('textures/Moss002/Moss002_4K-JPG_Roughness.jpg', 2.8, 2.8, false),
-    roughness: 0.9, metalness: 0.02, side: THREE.DoubleSide
-  }),
-  bark: new THREE.MeshStandardMaterial({
-    map: loadTiledTex('textures/bark_willow/bark_willow_diff_4k.jpg', 2.0, 2.6, true),
-    normalMap: loadTiledTex('textures/bark_willow/bark_willow_nor_gl_4k.jpg', 2.0, 2.6, false),
-    roughnessMap: loadTiledTex('textures/bark_willow/bark_willow_rough_4k.jpg', 2.0, 2.6, false),
-    roughness: 0.88, metalness: 0.03, side: THREE.DoubleSide
-  }),
-  barkAlt: new THREE.MeshStandardMaterial({
-    map: loadTiledTex('textures/Bark012/Bark012_4K-JPG_Color.jpg', 2.2, 2.6, true),
-    normalMap: loadTiledTex('textures/Bark012/Bark012_4K-JPG_NormalGL.jpg', 2.2, 2.6, false),
-    roughnessMap: loadTiledTex('textures/Bark012/Bark012_4K-JPG_Roughness.jpg', 2.2, 2.6, false),
-    roughness: 0.86, metalness: 0.03, side: THREE.DoubleSide
-  }),
-  rock: new THREE.MeshStandardMaterial({
-    map: loadTiledTex('textures/rock_boulder_dry/rock_boulder_dry_diff_4k.jpg', 2.2, 2.2, true),
-    normalMap: loadTiledTex('textures/rock_boulder_dry/rock_boulder_dry_nor_gl_4k.jpg', 2.2, 2.2, false),
-    roughnessMap: loadTiledTex('textures/rock_boulder_dry/rock_boulder_dry_rough_4k.jpg', 2.2, 2.2, false),
-    roughness: 0.85, metalness: 0.04, side: THREE.DoubleSide
-  }),
-  rockAlt: new THREE.MeshStandardMaterial({
-    map: loadTiledTex('textures/Rock035/Rock035_4K-JPG_Color.jpg', 2.2, 2.2, true),
-    normalMap: loadTiledTex('textures/Rock035/Rock035_4K-JPG_NormalGL.jpg', 2.2, 2.2, false),
-    roughnessMap: loadTiledTex('textures/Rock035/Rock035_4K-JPG_Roughness.jpg', 2.2, 2.2, false),
-    roughness: 0.86, metalness: 0.04, side: THREE.DoubleSide
-  }),
-  leaves: new THREE.MeshStandardMaterial({
-    map: loadTiledTex('textures/brown_mud_leaves_01/brown_mud_leaves_01_diff_4k.jpg', 2.6, 2.6, true),
-    normalMap: loadTiledTex('textures/brown_mud_leaves_01/brown_mud_leaves_01_nor_gl_4k.jpg', 2.6, 2.6, false),
-    roughnessMap: loadTiledTex('textures/brown_mud_leaves_01/brown_mud_leaves_01_rough_4k.jpg', 2.6, 2.6, false),
-    roughness: 0.9, metalness: 0.02, side: THREE.DoubleSide
-  }),
-  leafCard: new THREE.MeshStandardMaterial({
-    map: loadTiledTex('textures/LeafSet023/LeafSet023_4K-JPG_Color.jpg', 1.8, 1.8, true),
-    normalMap: loadTiledTex('textures/LeafSet023/LeafSet023_4K-JPG_NormalGL.jpg', 1.8, 1.8, false),
-    roughnessMap: loadTiledTex('textures/LeafSet023/LeafSet023_4K-JPG_Roughness.jpg', 1.8, 1.8, false),
-    roughness: 0.84, metalness: 0.02, side: THREE.DoubleSide
-  }),
-  soil: new THREE.MeshStandardMaterial({
-    map: loadTiledTex('textures/forrest_ground_01/forrest_ground_01_diff_4k.jpg', 2.5, 2.5, true),
-    normalMap: loadTiledTex('textures/forrest_ground_01/forrest_ground_01_nor_gl_4k.jpg', 2.5, 2.5, false),
-    roughnessMap: loadTiledTex('textures/forrest_ground_01/forrest_ground_01_rough_4k.jpg', 2.5, 2.5, false),
-    roughness: 0.94, metalness: 0.02, side: THREE.DoubleSide
-  }),
-  soilAlt: new THREE.MeshStandardMaterial({
-    map: loadTiledTex('textures/Ground054/Ground054_4K-JPG_Color.jpg', 2.5, 2.5, true),
-    normalMap: loadTiledTex('textures/Ground054/Ground054_4K-JPG_NormalGL.jpg', 2.5, 2.5, false),
-    roughnessMap: loadTiledTex('textures/Ground054/Ground054_4K-JPG_Roughness.jpg', 2.5, 2.5, false),
-    roughness: 0.95, metalness: 0.02, side: THREE.DoubleSide
-  })
+  moss:     makePBRSet('moss',     'textures/moss_01/moss_01_diff_4k.jpg',                         'textures/moss_01/moss_01_nor_gl_4k.jpg',                         'textures/moss_01/moss_01_rough_4k.jpg',                         2.5, 2.5, 0.92, 0.02),
+  mossAlt:  makePBRSet('mossAlt',  'textures/Moss002/Moss002_4K-JPG_Color.jpg',                    'textures/Moss002/Moss002_4K-JPG_NormalGL.jpg',                    'textures/Moss002/Moss002_4K-JPG_Roughness.jpg',                   2.8, 2.8, 0.90, 0.02),
+  bark:     makePBRSet('bark',     'textures/bark_willow/bark_willow_diff_4k.jpg',                 'textures/bark_willow/bark_willow_nor_gl_4k.jpg',                 'textures/bark_willow/bark_willow_rough_4k.jpg',                 2.0, 2.6, 0.88, 0.03),
+  barkAlt:  makePBRSet('barkAlt',  'textures/Bark012/Bark012_4K-JPG_Color.jpg',                    'textures/Bark012/Bark012_4K-JPG_NormalGL.jpg',                    'textures/Bark012/Bark012_4K-JPG_Roughness.jpg',                   2.2, 2.6, 0.86, 0.03),
+  rock:     makePBRSet('rock',     'textures/rock_boulder_dry/rock_boulder_dry_diff_4k.jpg',       'textures/rock_boulder_dry/rock_boulder_dry_nor_gl_4k.jpg',       'textures/rock_boulder_dry/rock_boulder_dry_rough_4k.jpg',       2.2, 2.2, 0.85, 0.04),
+  rockAlt:  makePBRSet('rockAlt',  'textures/Rock035/Rock035_4K-JPG_Color.jpg',                    'textures/Rock035/Rock035_4K-JPG_NormalGL.jpg',                    'textures/Rock035/Rock035_4K-JPG_Roughness.jpg',                   2.2, 2.2, 0.86, 0.04),
+  leaves:   makePBRSet('leaves',   'textures/brown_mud_leaves_01/brown_mud_leaves_01_diff_4k.jpg', 'textures/brown_mud_leaves_01/brown_mud_leaves_01_nor_gl_4k.jpg', 'textures/brown_mud_leaves_01/brown_mud_leaves_01_rough_4k.jpg', 2.6, 2.6, 0.90, 0.02),
+  leafCard: makePBRSet('leafCard', 'textures/LeafSet023/LeafSet023_4K-JPG_Color.jpg',              'textures/LeafSet023/LeafSet023_4K-JPG_NormalGL.jpg',              'textures/LeafSet023/LeafSet023_4K-JPG_Roughness.jpg',             1.8, 1.8, 0.84, 0.02),
+  soil:     makePBRSet('soil',     'textures/forrest_ground_01/forrest_ground_01_diff_4k.jpg',     'textures/forrest_ground_01/forrest_ground_01_nor_gl_4k.jpg',     'textures/forrest_ground_01/forrest_ground_01_rough_4k.jpg',     2.5, 2.5, 0.94, 0.02),
+  soilAlt:  makePBRSet('soilAlt',  'textures/Ground054/Ground054_4K-JPG_Color.jpg',                'textures/Ground054/Ground054_4K-JPG_NormalGL.jpg',                'textures/Ground054/Ground054_4K-JPG_Roughness.jpg',               2.5, 2.5, 0.95, 0.02)
 };
 
-const glassImperfectionTex = loadTiledTex('textures/SurfaceImperfections003/SurfaceImperfections003_4K-JPG_Color.jpg', 1.5, 1.5, false);
-const glassImperfectionAltTex = loadTiledTex('textures/SurfaceImperfections001/SurfaceImperfections001_4K-JPG_Color.jpg', 1.5, 1.5, false);
 const glassMat = new THREE.MeshStandardMaterial({
+  name: 'glass',
   color: 0xe7f1ea,
   transparent: true,
   opacity: 0.16,
   roughness: 0.14,
-  roughnessMap: glassImperfectionTex,
-  bumpMap: glassImperfectionAltTex,
   bumpScale: 0.004,
   metalness: 0,
   depthWrite: false,
   side: THREE.DoubleSide
+});
+loadTiledTex('textures/SurfaceImperfections003/SurfaceImperfections003_4K-JPG_Color.jpg', 1.5, 1.5, false, (tex) => {
+  glassMat.roughnessMap = tex;
+  glassMat.needsUpdate = true;
+});
+loadTiledTex('textures/SurfaceImperfections001/SurfaceImperfections001_4K-JPG_Color.jpg', 1.5, 1.5, false, (tex) => {
+  glassMat.bumpMap = tex;
+  glassMat.needsUpdate = true;
 });
 
 function ensureTriplanarBoxUVs(geometry, worldMatrix, scale){
@@ -835,7 +826,6 @@ function ensureTriplanarBoxUVs(geometry, worldMatrix, scale){
 
 function assignTerrariumPBRMaterial(mesh, part){
   if (!mesh || !mesh.geometry) return;
-  ensureTriplanarBoxUVs(mesh.geometry, mesh.matrixWorld, 0.72);
   const box = new THREE.Box3().setFromObject(mesh);
   const c = new THREE.Vector3();
   box.getCenter(c);
@@ -854,26 +844,45 @@ function assignTerrariumPBRMaterial(mesh, part){
     avgNy = cnt ? sum / cnt : 0;
   }
   const idx = parseInt((mesh.name || '').replace(/\D+/g, ''), 10) || 0;
-  if (part === 'ground' || ny < 0.22){
-    if (avgNy > 0.38){
-      mesh.material = (idx % 2 === 0) ? pbrSets.leaves : pbrSets.leafCard;
-    } else {
-      mesh.material = (idx % 2 === 0) ? pbrSets.soil : pbrSets.soilAlt;
-    }
-  } else if (ny < 0.44){
+  let targetMat = null;
+  if (part === 'base'){
     if (avgNy > 0.45){
-      mesh.material = (idx % 2 === 0) ? pbrSets.moss : pbrSets.mossAlt;
-    } else if (part === 'trunk' || part === 'trunk_left' || part === 'trunk_right'){
-      mesh.material = (idx % 2 === 0) ? pbrSets.bark : pbrSets.barkAlt;
+      targetMat = (idx % 2 === 0) ? pbrSets.soil : pbrSets.soilAlt;
     } else {
-      mesh.material = (idx % 2 === 0) ? pbrSets.rock : pbrSets.rockAlt;
+      targetMat = (idx % 2 === 0) ? pbrSets.rock : pbrSets.rockAlt;
+    }
+  } else if (part === 'lid' || part === 'frame'){
+    targetMat = (idx % 2 === 0) ? pbrSets.rockAlt : pbrSets.barkAlt;
+  } else if (part === 'ground' || (ny < 0.365 && part !== 'trunk' && part !== 'trunk_left' && part !== 'trunk_right')){
+    if (avgNy > 0.38){
+      targetMat = (idx % 2 === 0) ? pbrSets.leaves : pbrSets.leafCard;
+    } else {
+      targetMat = (idx % 2 === 0) ? pbrSets.soil : pbrSets.soilAlt;
+    }
+  } else if (ny < 0.46){
+    if (avgNy > 0.45){
+      targetMat = (idx % 2 === 0) ? pbrSets.moss : pbrSets.mossAlt;
+    } else if (part === 'trunk' || part === 'trunk_left' || part === 'trunk_right'){
+      targetMat = (idx % 2 === 0) ? pbrSets.bark : pbrSets.barkAlt;
+    } else {
+      targetMat = (idx % 2 === 0) ? pbrSets.rock : pbrSets.rockAlt;
     }
   } else {
     if (avgNy > 0.42 || part === 'vine'){
-      mesh.material = (idx % 2 === 0) ? pbrSets.mossAlt : pbrSets.moss;
+      targetMat = (idx % 2 === 0) ? pbrSets.mossAlt : pbrSets.moss;
     } else {
-      mesh.material = (idx % 2 === 0) ? pbrSets.bark : pbrSets.barkAlt;
+      targetMat = (idx % 2 === 0) ? pbrSets.bark : pbrSets.barkAlt;
     }
+  }
+  const hasBakedMap = Boolean(mesh.material && mesh.material.map);
+  if (!hasBakedMap || (targetMat && targetMat.userData && targetMat.userData.loaded4K)){
+    ensureTriplanarBoxUVs(mesh.geometry, mesh.matrixWorld, 0.72);
+    mesh.material = targetMat;
+  } else if (targetMat && targetMat.userData && canLoadExternalTex){
+    if (! mesh.geometry.attributes.uv){
+      ensureTriplanarBoxUVs(mesh.geometry, mesh.matrixWorld, 0.72);
+    }
+    targetMat.userData.pendingMeshes.push(mesh);
   }
 }
 
@@ -964,14 +973,28 @@ loadGLB('生態箱.glb').then((gltf) => {
   wrap.traverse(o => {
     if (!o.isMesh) return;
     if (o.userData.isGlass){
+      ensureTriplanarBoxUVs(o.geometry, o.matrixWorld, 0.72);
+      o.material = glassMat;
+      o.renderOrder = 2;
+      o.userData.isTankPart = false;
       partCounts.glass = (partCounts.glass || 0) + 1;
       return;
     }
     const part = classifyTankPart(o);
     o.userData.part = part;
-    if (part === 'glass' || part === 'lid' || part === 'base' || part === 'frame'){
+    if (part === 'glass'){
+      ensureTriplanarBoxUVs(o.geometry, o.matrixWorld, 0.72);
+      o.material = glassMat;
+      o.renderOrder = 2;
       o.userData.isTankPart = false;
-      o.userData.isFrame = part !== 'glass';
+      o.userData.isGlass = true;
+      partCounts.glass = (partCounts.glass || 0) + 1;
+      return;
+    }
+    if (part === 'lid' || part === 'base' || part === 'frame'){
+      o.userData.isTankPart = false;
+      o.userData.isFrame = true;
+      assignTerrariumPBRMaterial(o, part);
       partCounts[part] = (partCounts[part] || 0) + 1;
       return;
     }
