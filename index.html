@@ -762,6 +762,40 @@ function makePBRSet(name, diffUrl, norUrl, roughUrl, rx, ry, roughVal, metalVal)
   return mat;
 }
 
+// Silver metal (ambientCG Metal049A, CC0) for tank base / lid / frame.
+function makeMetalEnvMap(){
+  // Minimal studio-like environment so metal reads as silver (applied to metal only).
+  const envScene = new THREE.Scene();
+  const envGeo = new THREE.SphereGeometry(10, 32, 16);
+  const cols = [];
+  const pos = envGeo.attributes.position;
+  for (let i = 0; i < pos.count; i++){
+    const t = THREE.MathUtils.clamp((pos.getY(i) / 10) * 0.5 + 0.5, 0, 1);
+    const c = new THREE.Color(0x3a3f44).lerp(new THREE.Color(0xf4f6f8), Math.pow(t, 0.8));
+    cols.push(c.r, c.g, c.b);
+  }
+  envGeo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+  envScene.add(new THREE.Mesh(envGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const rt = pmrem.fromScene(envScene, 0.04);
+  pmrem.dispose();
+  envGeo.dispose();
+  return rt.texture;
+}
+
+function makeMetalSet(name, id, rx, ry){
+  const base = 'textures/' + id + '/' + id + '_4K-JPG_';
+  const mat = makePBRSet(name, base + 'Color.jpg', base + 'NormalGL.jpg', base + 'Roughness.jpg', rx, ry, 1.0, 1.0);
+  mat.color.set(0xd9dde2);
+  mat.envMap = makeMetalEnvMap();
+  mat.envMapIntensity = 1.0;
+  loadTiledTex(base + 'Metalness.jpg', rx, ry, false, (tex) => {
+    mat.metalnessMap = tex;
+    mat.needsUpdate = true;
+  });
+  return mat;
+}
+
 const pbrSets = {
   moss:     makePBRSet('moss',     'textures/moss_01/moss_01_diff_4k.jpg',                         'textures/moss_01/moss_01_nor_gl_4k.jpg',                         'textures/moss_01/moss_01_rough_4k.jpg',                         2.5, 2.5, 0.92, 0.02),
   mossAlt:  makePBRSet('mossAlt',  'textures/Moss002/Moss002_4K-JPG_Color.jpg',                    'textures/Moss002/Moss002_4K-JPG_NormalGL.jpg',                    'textures/Moss002/Moss002_4K-JPG_Roughness.jpg',                   2.8, 2.8, 0.90, 0.02),
@@ -772,7 +806,8 @@ const pbrSets = {
   leaves:   makePBRSet('leaves',   'textures/brown_mud_leaves_01/brown_mud_leaves_01_diff_4k.jpg', 'textures/brown_mud_leaves_01/brown_mud_leaves_01_nor_gl_4k.jpg', 'textures/brown_mud_leaves_01/brown_mud_leaves_01_rough_4k.jpg', 2.6, 2.6, 0.90, 0.02),
   leafCard: makePBRSet('leafCard', 'textures/LeafSet023/LeafSet023_4K-JPG_Color.jpg',              'textures/LeafSet023/LeafSet023_4K-JPG_NormalGL.jpg',              'textures/LeafSet023/LeafSet023_4K-JPG_Roughness.jpg',             1.8, 1.8, 0.84, 0.02),
   soil:     makePBRSet('soil',     'textures/forrest_ground_01/forrest_ground_01_diff_4k.jpg',     'textures/forrest_ground_01/forrest_ground_01_nor_gl_4k.jpg',     'textures/forrest_ground_01/forrest_ground_01_rough_4k.jpg',     2.5, 2.5, 0.94, 0.02),
-  soilAlt:  makePBRSet('soilAlt',  'textures/Ground054/Ground054_4K-JPG_Color.jpg',                'textures/Ground054/Ground054_4K-JPG_NormalGL.jpg',                'textures/Ground054/Ground054_4K-JPG_Roughness.jpg',               2.5, 2.5, 0.95, 0.02)
+  soilAlt:  makePBRSet('soilAlt',  'textures/Ground054/Ground054_4K-JPG_Color.jpg',                'textures/Ground054/Ground054_4K-JPG_NormalGL.jpg',                'textures/Ground054/Ground054_4K-JPG_Roughness.jpg',               2.5, 2.5, 0.95, 0.02),
+  metal:    makeMetalSet('metal', 'Metal049A', 1.5, 1.5)
 };
 
 const glassMat = new THREE.MeshStandardMaterial({
@@ -846,11 +881,11 @@ function assignTerrariumPBRMaterial(mesh, part){
   const idx = parseInt((mesh.name || '').replace(/\D+/g, ''), 10) || 0;
   let targetMat = null;
   if (part === 'base'){
-    targetMat = pbrSets.rockAlt;
+    targetMat = pbrSets.metal;
   } else if (part === 'lid'){
-    targetMat = pbrSets.barkAlt;
+    targetMat = pbrSets.metal;
   } else if (part === 'frame'){
-    targetMat = pbrSets.barkAlt;
+    targetMat = pbrSets.metal;
   } else if (part === 'ground' || (ny < 0.365 && part !== 'trunk' && part !== 'trunk_left' && part !== 'trunk_right')){
     if (avgNy > 0.38){
       targetMat = (idx % 2 === 0) ? pbrSets.leaves : pbrSets.leafCard;
