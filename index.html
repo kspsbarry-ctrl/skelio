@@ -3,7 +3,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>素樞 SKELIO</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500&family=Noto+Serif+TC:wght@500;600&display=swap" rel="stylesheet">
@@ -27,7 +27,7 @@
   html::-webkit-scrollbar, body::-webkit-scrollbar{ display:none; }
   body.inside{ overflow-y:auto; }
   body{ font-family:'Noto Serif TC', serif; }
-  canvas{ position:fixed; inset:0; z-index:1; display:block; cursor:pointer; }
+  canvas{ position:fixed; inset:0; z-index:1; display:block; cursor:pointer; touch-action:none; width:100%; height:100%; max-width:100%; }
   .scroll-track{
     position:relative; width:1px; height:100vh; pointer-events:none; z-index:0;
   }
@@ -162,15 +162,93 @@
     transition:transform .2s ease, background .2s ease;
   }
   .card-plus-btn:hover{ transform:scale(1.08); background:#33312b; }
+  @keyframes skelio-spin{ to{ transform:rotate(360deg); } }
   @media (prefers-reduced-motion: reduce){
-    .open span::after{ animation:none; }
+    .open span::after, .status.is-loading::before{ animation:none; }
   }
-  @media (max-width:720px){
-    .mark, .back, .reset, .status{ left:20px; }
-    .back, .reset{ right:20px; left:auto; }
-    .reset{ right:96px; }
-    .mark{ top:20px; }
-    .back, .reset{ top:20px; }
+  @media (max-width:768px), (max-height:520px) and (pointer:coarse){
+    html, body{ max-width:100%; overflow-x:hidden; }
+    canvas{
+      top:0; right:0; bottom:auto; left:0;
+      width:100%; max-width:100%;
+      height:100vh; height:100dvh;
+    }
+    .mark{
+      top:max(12px, env(safe-area-inset-top, 0px));
+      left:max(16px, env(safe-area-inset-left, 0px));
+      font-size:clamp(11px, 3.2vw, 13px);
+      letter-spacing:.22em;
+    }
+    .open{
+      bottom:max(16px, env(safe-area-inset-bottom, 0px));
+      min-width:44px; min-height:44px;
+      padding:12px 18px;
+      font-size:clamp(12px, 3.4vw, 14px);
+    }
+    .back, .reset{
+      top:max(8px, env(safe-area-inset-top, 0px));
+      left:auto;
+      min-width:44px; min-height:44px;
+      padding:0 14px;
+      font-size:12px; letter-spacing:.14em;
+      display:inline-flex; align-items:center; justify-content:center;
+      white-space:nowrap;
+    }
+    .back{ right:max(12px, env(safe-area-inset-right, 0px)); }
+    .reset{ right:max(108px, calc(env(safe-area-inset-right, 0px) + 96px)); }
+    .status{
+      left:max(16px, env(safe-area-inset-left, 0px));
+      right:max(16px, env(safe-area-inset-right, 0px));
+      bottom:calc(env(safe-area-inset-bottom, 0px) + 118px);
+      max-width:none; text-align:center;
+      font-size:clamp(11px, 3vw, 13px);
+    }
+    body.inside .status{
+      top:calc(env(safe-area-inset-top, 0px) + 108px);
+      bottom:auto;
+    }
+    .status.is-loading::before{
+      content:"";
+      display:inline-block;
+      width:14px; height:14px; margin-right:8px;
+      border-radius:50%;
+      border:2px solid rgba(28,27,24,.25);
+      border-top-color:currentColor;
+      vertical-align:-2px;
+      animation:skelio-spin .8s linear infinite;
+    }
+    .scroll-hud{
+      left:max(12px, env(safe-area-inset-left, 0px));
+      right:max(12px, env(safe-area-inset-right, 0px));
+      top:calc(env(safe-area-inset-top, 0px) + 56px);
+      bottom:auto; transform:none; width:auto;
+      gap:8px; padding:8px 12px;
+      font-size:10px; letter-spacing:.1em;
+      pointer-events:none;
+    }
+    .scroll-hud-bar{ flex:1 1 auto; width:auto; min-width:36px; }
+    #scrollStageLabel{
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:42vw;
+    }
+    .specimen-card{
+      left:max(10px, env(safe-area-inset-left, 0px));
+      right:max(10px, env(safe-area-inset-right, 0px));
+      top:auto;
+      bottom:max(8px, env(safe-area-inset-bottom, 0px));
+      width:auto;
+      max-height:min(46dvh, 420px);
+      overflow:auto;
+      -webkit-overflow-scrolling:touch;
+      overscroll-behavior:contain;
+      padding:16px 16px 14px;
+      transform:translate3d(0, 24px, 0);
+    }
+    .specimen-card.visible{ transform:none; }
+    .specimen-card-name{ font-size:clamp(18px, 5vw, 22px); }
+    .specimen-card-summary{ -webkit-line-clamp:4; }
+    .specimen-card-footer{ flex-wrap:wrap; gap:8px; }
+    .card-share-btn, .card-plus-btn{ min-width:44px; min-height:44px; }
+    .card-plus-btn{ width:44px; height:44px; }
   }
 </style>
 </head>
@@ -213,12 +291,22 @@ function showStatus(text){
   if (!statusEl) return;
   statusEl.textContent = text;
   statusEl.classList.add('on');
+  statusEl.classList.toggle('is-loading', typeof text === 'string' && /^(LOADING|DETECTING|VERIFYING)/.test(text));
 }
 function loadFailText(){
   return location.protocol === 'file:' ? '載入失敗 · 請以 Live Server 開啟' : '載入失敗';
 }
 function boot(){
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function mobileLayout(){
+  return matchMedia('(max-width: 768px), (max-height: 520px) and (pointer: coarse)').matches;
+}
+function mobileNow(){
+  return mobileLayout() || matchMedia('(pointer: coarse)').matches;
+}
+function pixelCap(){
+  return mobileNow() ? 1.25 : 1.5;
+}
 const beetles = (Array.isArray(SKELIO.tank) ? SKELIO.tank : []).filter(spec => spec && typeof spec.model === 'string' && spec.model);
 let seats = [];
 let contextLost = false;
@@ -229,18 +317,29 @@ scene.background = new THREE.Color(0xf6f5f2);
 const camera = new THREE.PerspectiveCamera(32, innerWidth/innerHeight, 0.2, 100);
 let renderer;
 try {
-  renderer = new THREE.WebGLRenderer({ antialias:true });
+  renderer = new THREE.WebGLRenderer({ antialias: !mobileNow() });
 } catch (err) {
   console.error('WebGL 初始化失敗', err);
   showStatus('此瀏覽器不支援 WebGL');
   return;
 }
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
-renderer.setSize(innerWidth, innerHeight);
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
+if (mobileNow() && renderer.shadowMap) renderer.shadowMap.enabled = false;
 document.body.appendChild(renderer.domElement);
+renderer.domElement.style.touchAction = 'none';
+function fitRenderer(){
+  const w = renderer.domElement.clientWidth || innerWidth;
+  const h = renderer.domElement.clientHeight || innerHeight || 1;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, pixelCap()));
+  if (mobileNow() && renderer.shadowMap) renderer.shadowMap.enabled = false;
+  renderer.setSize(w, h, false);
+}
+fitRenderer();
+requestAnimationFrame(fitRenderer);
 renderer.domElement.addEventListener('webglcontextlost', (event) => {
   event.preventDefault();
   contextLost = true;
@@ -251,7 +350,7 @@ renderer.domElement.addEventListener('webglcontextrestored', () => {
   contextLost = false;
   if (statusEl.textContent === '顯示中斷') {
     statusEl.textContent = '';
-    statusEl.classList.remove('on');
+    statusEl.classList.remove('on', 'is-loading');
   }
   cancelAnimationFrame(frameId);
   frameId = requestAnimationFrame(tick);
@@ -1084,7 +1183,7 @@ loadGLB('生態箱.glb').then((gltf) => {
     }
     showStatus('READY  ' + seats.length + ' SEATS');
     setTimeout(() => {
-      if (statusEl.textContent.indexOf('READY') === 0) statusEl.classList.remove('on');
+      if (statusEl.textContent.indexOf('READY') === 0) statusEl.classList.remove('on', 'is-loading');
     }, 1400);
     const openBtn = document.getElementById('open');
     if (openBtn) openBtn.classList.add('ready');
@@ -1109,7 +1208,7 @@ function placeBeetles(){
   insectGroups.forEach(g => scene.remove(g));
   insectGroups = [];
   const assigned = beetles.map((_, i) => seats[i] || seats[seats.length - 1] || null);
-  return Promise.allSettled(beetles.map((spec, i) => loadGLB(spec.model).then((gltf) => {
+  const loadOne = (spec, i) => loadGLB(spec.model).then((gltf) => {
     if (!gltf || !gltf.scene) throw new Error('模型是空的');
     const g = fitCreature(gltf.scene, target);
     g.userData.isInsect = true;
@@ -1119,11 +1218,12 @@ function placeBeetles(){
     if (seat) sitOn(g, seat);
     scene.add(g);
     insectGroups.push(g);
-    statusEl.textContent = 'LOADING  ' + (++loaded) + ' / ' + beetles.length;
+    showStatus('LOADING  ' + (++loaded) + ' / ' + beetles.length);
   }).catch((err) => {
     console.error('甲蟲模型載入失敗', spec.model, err);
     throw err;
-  }))).then((results) => {
+  });
+  const finish = (results) => {
     const failed = results.filter(result => result.status === 'rejected').length;
     if (!loaded){
       showStatus(loadFailText());
@@ -1133,9 +1233,21 @@ function placeBeetles(){
       showStatus('已載入 ' + loaded + ' / ' + beetles.length);
       return;
     }
-    statusEl.textContent = 'ORBIT · ZOOM';
-    setTimeout(() => statusEl.classList.remove('on'), 1600);
-  });
+    showStatus('ORBIT · ZOOM');
+    setTimeout(() => { if (statusEl) statusEl.classList.remove('on', 'is-loading'); }, 1600);
+  };
+  if (mobileNow()){
+    const results = [];
+    let chain = Promise.resolve();
+    beetles.forEach((spec, i) => {
+      chain = chain.then(() => loadOne(spec, i).then(
+        () => { results.push({ status: 'fulfilled' }); },
+        () => { results.push({ status: 'rejected' }); }
+      ));
+    });
+    return chain.then(() => finish(results));
+  }
+  return Promise.allSettled(beetles.map((spec, i) => loadOne(spec, i))).then(finish);
 }
 
 // --- Scroll-Driven Camera Choreography (GSAP ScrollTrigger + Lenis) + Manual Orbit Coexistence ---
@@ -1442,6 +1554,18 @@ renderer.domElement.addEventListener('pointermove', (e) => {
   if (Math.abs(dx) + Math.abs(dy) > 3) dragMoved = true;
   lastX = e.clientX;
   lastY = e.clientY;
+  if (mobileLayout() && phase === 'inside' && !focusedInsect && Math.abs(dy) > Math.abs(dx)){
+    const maxScroll = Math.max(1, document.documentElement.scrollHeight - innerHeight);
+    if (lenis && typeof lenis.scrollTo === 'function'){
+      const current = typeof lenis.scroll === 'number' ? lenis.scroll : window.scrollY;
+      lenis.scrollTo(Math.max(0, Math.min(maxScroll, current - dy)), { immediate: true });
+    } else {
+      const next = Math.max(0, Math.min(1, scrollProgress - dy / Math.max(innerHeight, 1)));
+      applyScrollChoreography(next);
+      window.scrollTo(0, next * maxScroll);
+    }
+    return;
+  }
   const yawStep = -dx * 0.005;
   const pitchStep = dy * 0.0035;
   userYawOffset += yawStep;
@@ -1574,12 +1698,7 @@ function tick(now){
 }
 tick(t0);
 
-window.addEventListener('resize', () => {
-  const height = innerHeight || 1;
-  camera.aspect = innerWidth / height;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, height);
-});
+window.addEventListener('resize', fitRenderer);
 }
 
 if (!window.THREE || !THREE.GLTFLoader || !THREE.WebGLRenderer){

@@ -3,7 +3,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>素樞 SKELIO — 生態缸</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600&family=Noto+Serif+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -15,7 +15,8 @@
   html,body{ height:100%; background:var(--ink-deep); color:var(--stone); overflow:hidden; }
   body{ font-family:'Noto Serif TC', serif; cursor:grab; }
   body.dragging{ cursor:grabbing; }
-  canvas{ display:block; }
+  canvas{ display:block; width:100%; height:100%; max-width:100%; touch-action:none; }
+  .nav-toggle{ display:none; }
   a{ color:inherit; text-decoration:none; }
   @media (prefers-reduced-motion: reduce){
     .info > *{ transition:none; }
@@ -65,6 +66,92 @@
     transition:opacity .8s ease, color .3s ease;
     max-width:min(86vw, 520px); text-align:center; line-height:1.6;
   }
+  @keyframes skelio-spin{ to{ transform:rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce){
+    .hint.is-loading span::before{ animation:none; }
+  }
+  @media (max-width:768px), (max-height:520px) and (pointer:coarse){
+    html, body{ max-width:100%; overflow-x:hidden; }
+    #canvas-wrap{
+      top:0; right:0; bottom:auto; left:0;
+      width:100%; max-width:100%;
+      height:100vh; height:100dvh;
+    }
+    .hud{
+      padding:
+        max(12px, env(safe-area-inset-top, 0px))
+        max(12px, env(safe-area-inset-right, 0px))
+        max(10px, env(safe-area-inset-bottom, 0px))
+        max(12px, env(safe-area-inset-left, 0px));
+    }
+    .top{ align-items:center; gap:8px; }
+    .back, .counter{
+      min-height:44px;
+      display:inline-flex; align-items:center;
+      font-size:clamp(11px, 3vw, 13px);
+    }
+    .nav-toggle{
+      display:inline-flex; align-items:center; justify-content:center;
+      pointer-events:auto; cursor:pointer;
+      min-width:44px; min-height:44px; padding:0 16px;
+      border:1px solid rgba(231,226,216,0.28);
+      background:rgba(12,11,8,0.55); color:var(--stone);
+      border-radius:999px;
+      font-family:'Noto Serif TC', serif; font-size:15px;
+    }
+    .bottom{
+      flex-direction:column; align-items:stretch; justify-content:flex-end; gap:10px;
+    }
+    .info{
+      order:2; width:100%; max-width:100%;
+      max-height:min(42dvh, 360px);
+      overflow:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
+      padding:14px 16px 12px;
+      border-radius:18px;
+      background:rgba(12,11,8,0.82);
+      border:1px solid rgba(231,226,216,0.16);
+      pointer-events:auto;
+    }
+    .info .name{ font-size:clamp(22px, 6.2vw, 32px); }
+    .info .latin, .info .summary, .info .specs{ font-size:clamp(13px, 3.4vw, 15px); }
+    .info .summary{ max-width:none; }
+    .info .price{ font-size:clamp(18px, 5vw, 24px); }
+    .info .price-row{ flex-wrap:wrap; gap:10px; }
+    .info .action-btn{ min-height:44px; padding:10px 16px; font-size:14px; }
+    .picks{
+      order:1; display:none;
+      flex-direction:row; align-items:center; justify-content:flex-start;
+      gap:8px; width:100%; max-width:100%;
+      overflow-x:auto; -webkit-overflow-scrolling:touch;
+      padding-bottom:2px;
+    }
+    body.nav-open .picks{ display:flex; }
+    .pick{
+      flex:0 0 auto;
+      min-height:44px; padding:8px 14px;
+      border-radius:999px;
+      border:1px solid rgba(231,226,216,0.22);
+      background:rgba(12,11,8,0.72);
+      font-size:14px;
+    }
+    .pick.active{ transform:none; color:var(--amber); border-color:var(--amber); }
+    .hint{
+      top:calc(env(safe-area-inset-top, 0px) + 60px);
+      bottom:auto;
+      max-width:calc(100% - 24px);
+      font-size:clamp(10px, 2.8vw, 12px);
+    }
+    .hint.is-loading span::before{
+      content:"";
+      display:inline-block;
+      width:12px; height:12px; margin-right:8px;
+      border-radius:50%;
+      border:2px solid rgba(231,226,216,.28);
+      border-top-color:var(--amber);
+      vertical-align:-1px;
+      animation:skelio-spin .8s linear infinite;
+    }
+  }
 </style>
 </head>
 <body>
@@ -72,6 +159,7 @@
 <div class="hud">
   <div class="top">
     <a class="back" href="index.html">← ATELIER</a>
+    <button class="nav-toggle" id="navToggle" type="button" aria-expanded="false" aria-controls="dots">標本</button>
     <div class="counter" id="counter">01</div>
   </div>
   <div class="bottom">
@@ -89,7 +177,7 @@
     <div class="picks" id="dots"></div>
   </div>
 </div>
-<div class="hint" id="hint"><span>LOADING</span></div>
+<div class="hint is-loading" id="hint"><span>LOADING</span></div>
 <script src="specimens.js"></script>
 <script>
 const hintEl = document.getElementById('hint');
@@ -97,13 +185,25 @@ const hintSpan = hintEl ? hintEl.querySelector('span') : null;
 function showHint(text, strong){
   if (!hintSpan) return;
   hintSpan.textContent = text;
-  if (hintEl) hintEl.style.color = strong ? 'var(--stone)' : 'var(--stone-mute)';
+  if (hintEl){
+    hintEl.style.color = strong ? 'var(--stone)' : 'var(--stone-mute)';
+    hintEl.classList.toggle('is-loading', text === 'LOADING');
+  }
 }
 function loadFailText(){
   return location.protocol === 'file:' ? '載入失敗 · 請以 Live Server 開啟' : '載入失敗';
 }
 function boot(){
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function mobileLayout(){
+  return window.matchMedia('(max-width: 768px), (max-height: 520px) and (pointer: coarse)').matches;
+}
+function mobileNow(){
+  return mobileLayout() || window.matchMedia('(pointer: coarse)').matches;
+}
+function pixelCap(){
+  return mobileNow() ? 1.25 : 1.5;
+}
 const specimens = (Array.isArray(SKELIO.tank) ? SKELIO.tank : []).filter(spec => spec && typeof spec.model === 'string' && spec.model);
 const N = specimens.length;
 let contextLost = false;
@@ -113,13 +213,27 @@ if (!N){
   return;
 }
 
+const navToggle = document.getElementById('navToggle');
+if (navToggle){
+  navToggle.addEventListener('click', () => {
+    const open = document.body.classList.toggle('nav-open');
+    navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+}
 const dotsEl = document.getElementById('dots');
 specimens.forEach((s, i) => {
   const b = document.createElement('button');
   b.className = 'pick' + (i===0 ? ' active' : '');
   b.type = 'button';
   b.textContent = s.name || s.model;
-  b.addEventListener('click', () => focusIndex(i));
+  b.addEventListener('click', () => {
+    focusIndex(i);
+    if (mobileLayout()){
+      document.body.classList.remove('nav-open');
+      const toggle = document.getElementById('navToggle');
+      if (toggle) toggle.setAttribute('aria-expanded', 'false');
+    }
+  });
   dotsEl.appendChild(b);
 });
 const dotEls = [...dotsEl.children];
@@ -167,19 +281,30 @@ const camera = new THREE.PerspectiveCamera(48, innerWidth/innerHeight, 0.1, 80);
 camera.position.set(0, 1.4, 11);
 let renderer;
 try {
-  renderer = new THREE.WebGLRenderer({ antialias:true });
+  renderer = new THREE.WebGLRenderer({ antialias: !mobileNow() });
 } catch (err) {
   console.error('WebGL 初始化失敗', err);
   showHint('此瀏覽器不支援 WebGL', true);
   return;
 }
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
+if (mobileNow() && renderer.shadowMap) renderer.shadowMap.enabled = false;
 renderer.setClearColor(0x0c0b08, 1);
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 wrap.appendChild(renderer.domElement);
+renderer.domElement.style.touchAction = 'none';
+function fitRenderer(){
+  const w = wrap.clientWidth || innerWidth;
+  const h = wrap.clientHeight || innerHeight || 1;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, pixelCap()));
+  if (mobileNow() && renderer.shadowMap) renderer.shadowMap.enabled = false;
+  renderer.setSize(w, h, false);
+}
+fitRenderer();
+requestAnimationFrame(fitRenderer);
 renderer.domElement.addEventListener('webglcontextlost', (event) => {
   event.preventDefault();
   contextLost = true;
@@ -538,7 +663,7 @@ function focusIndex(i, unknown){
     if (unknown) showHint('找不到此標本', true);
     else showHint('DRAG  ·  SCROLL', false);
     const next = (index + 1) % N;
-    if (next !== index) ensure(next, true).catch(err => console.error('預載失敗', err));
+    if (next !== index && !mobileNow()) ensure(next, true).catch(err => console.error('預載失敗', err));
   }).catch((err) => {
     if (active !== index) return;
     console.error('模型載入失敗', err);
@@ -576,12 +701,18 @@ let velY = 0, velX = 0;
 let dragging = false;
 let moved = false;
 let lastPX = 0, lastPY = 0;
+let gestureDx = 0, gestureDy = 0;
+let orbitAtDownY = 0.35, orbitAtDownX = 0.22;
 let wheelLock = 0;
 
 wrap.style.touchAction = 'none';
 wrap.addEventListener('pointerdown', (e) => {
   dragging = true;
   moved = false;
+  gestureDx = 0;
+  gestureDy = 0;
+  orbitAtDownY = targetY;
+  orbitAtDownX = targetX;
   lastPX = e.clientX;
   lastPY = e.clientY;
   velY = 0;
@@ -598,12 +729,24 @@ wrap.addEventListener('pointermove', (e) => {
   if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
   lastPX = e.clientX;
   lastPY = e.clientY;
+  gestureDx += dx;
+  gestureDy += dy;
+  if (mobileLayout() && Math.abs(gestureDx) > Math.abs(gestureDy)){
+    targetY = orbitAtDownY;
+    targetX = orbitAtDownX;
+    velY = 0;
+    velX = 0;
+    return;
+  }
   targetY += dx * 0.005;
   targetX = Math.max(-0.15, Math.min(0.7, targetX + dy * 0.003));
   velY = dx * 0.005;
   velX = dy * 0.003;
 });
 function endDrag(){
+  if (mobileLayout() && moved && Math.abs(gestureDx) > 48 && Math.abs(gestureDx) > Math.abs(gestureDy)){
+    focusIndex(active + (gestureDx < 0 ? 1 : -1));
+  }
   dragging = false;
   document.body.classList.remove('dragging');
 }
@@ -672,13 +815,7 @@ function tick(now){
 }
 frameId = requestAnimationFrame(tick);
 
-window.addEventListener('resize', () => {
-  const height = innerHeight || 1;
-  camera.aspect = innerWidth / height;
-  camera.updateProjectionMatrix();
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  renderer.setSize(innerWidth, height);
-});
+window.addEventListener('resize', fitRenderer);
 }
 
 if (!window.THREE || !THREE.GLTFLoader || !THREE.WebGLRenderer){
