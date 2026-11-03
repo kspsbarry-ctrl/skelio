@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600&family=Noto+Serif+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
 <style>
   :root{ --stone:#ece7de; --stone-mute:#a8a296; --ink-deep:#0c0b08; --moss:#9aa88d; --amber:#d19a52; }
   *{margin:0; padding:0; box-sizing:border-box;}
@@ -483,6 +484,9 @@ const camPos = new THREE.Vector3(0, 0.35, 6.4);
 const camAim = new THREE.Vector3(0, -0.35, 0);
 const introFrom = new THREE.Vector3(0, 1.6, 12);
 const gltfLoader = new THREE.GLTFLoader();
+const dracoLoader = new THREE.DRACOLoader();
+dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+gltfLoader.setDRACOLoader(dracoLoader);
 const silverMeshNames = ['生態缸底座'];
 function shellPartForBox(meshBox, tankBox){
   const s = new THREE.Vector3();
@@ -662,8 +666,9 @@ function focusIndex(i, unknown){
     showOnly(index);
     if (unknown) showHint('找不到此標本', true);
     else showHint('DRAG  ·  SCROLL', false);
-    const next = (index + 1) % N;
-    if (next !== index && !mobileNow()) ensure(next, true).catch(err => console.error('預載失敗', err));
+    specimens.forEach((_, k) => {
+      if (k !== index) ensure(k, true).catch(err => console.error('預載失敗', err));
+    });
   }).catch((err) => {
     if (active !== index) return;
     console.error('模型載入失敗', err);
