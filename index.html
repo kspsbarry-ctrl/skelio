@@ -785,7 +785,8 @@ function makeMetalEnvMap(){
 
 function makeMetalSet(name, id, rx, ry){
   const base = 'textures/' + id + '/' + id + '_4K-JPG_';
-  const mat = makePBRSet(name, base + 'Color.jpg', base + 'NormalGL.jpg', base + 'Roughness.jpg', rx, ry, 1.0, 1.0);
+  // roughness 0.16 scales the roughnessMap (Three.js multiplies them) so the plate stays polished.
+  const mat = makePBRSet(name, base + 'Color.jpg', base + 'NormalGL.jpg', base + 'Roughness.jpg', rx, ry, 0.16, 1.0);
   mat.color.set(0xd9dde2);
   mat.envMap = makeMetalEnvMap();
   mat.envMapIntensity = 1.0;
@@ -930,18 +931,32 @@ function panelLike(mesh){
   return (dims[0] < dims[2] * 0.045 && dims[2] > 0.08) || (dims[0] < 0.012 && dims[1] > 0.15 && dims[2] > 0.15);
 }
 
-function isFrameOrBase(mesh){
+function exteriorShellPart(mesh){
   const box = new THREE.Box3().setFromObject(mesh);
   const c = new THREE.Vector3();
   const s = new THREE.Vector3();
   box.getCenter(c);
   box.getSize(s);
   const dims = [s.x, s.y, s.z].sort((a, b) => a - b);
-  if (c.y < boxSize.y * 0.14 && s.x > boxSize.x * 0.45 && s.z > boxSize.z * 0.35) return true;
-  if (c.y > boxSize.y * 0.86 && s.x > boxSize.x * 0.4) return true;
-  if (dims[0] < boxSize.y * 0.035 && dims[2] > boxSize.x * 0.28) return true;
-  if (c.z > boxSize.z * 0.28 && dims[0] < boxSize.y * 0.05 && s.x > boxSize.x * 0.25) return true;
-  return false;
+  const minX = -boxSize.x * 0.5;
+  const maxX = boxSize.x * 0.5;
+  const minY = 0;
+  const maxY = boxSize.y;
+  const minZ = -boxSize.z * 0.5;
+  const maxZ = boxSize.z * 0.5;
+  const ny = (c.y - minY) / Math.max(boxSize.y, 1e-6);
+  if (box.min.y <= minY + boxSize.y * 0.04 && s.x > boxSize.x * 0.62 && s.z > boxSize.z * 0.62 && s.y < boxSize.y * 0.45) return 'base';
+  const onTop = box.max.y >= maxY - boxSize.y * 0.06;
+  const wideCap = s.x > boxSize.x * 0.65 && s.z > boxSize.z * 0.7;
+  const flat = s.y < boxSize.y * 0.14;
+  if ((onTop || ny > 0.88) && wideCap && flat) return 'lid';
+  const slender = dims[0] < boxSize.y * 0.05 && (dims[0] / Math.max(dims[2], 1e-6)) < 0.12 && dims[2] > boxSize.x * 0.3;
+  const margin = 0.03;
+  const onShell = box.min.x <= minX + boxSize.x * margin || box.max.x >= maxX - boxSize.x * margin ||
+    box.min.y <= minY + boxSize.y * margin || box.max.y >= maxY - boxSize.y * margin ||
+    box.min.z <= minZ + boxSize.z * margin || box.max.z >= maxZ - boxSize.z * margin;
+  if (slender && onShell) return 'frame';
+  return null;
 }
 
 function classifyTankPart(mesh){
@@ -955,7 +970,8 @@ function classifyTankPart(mesh){
   const nx = c.x / Math.max(boxSize.x * 0.5, 1e-6);
   const thinRatio = dims[0] / Math.max(dims[2], 1e-6);
   if (panelLike(mesh) || thinRatio < 0.045) return 'glass';
-  if (isFrameOrBase(mesh)) return ny > 0.8 ? 'lid' : (ny < 0.2 ? 'base' : 'frame');
+  const shell = exteriorShellPart(mesh);
+  if (shell) return shell;
   if (s.y > boxSize.y * 0.32 && Math.max(s.x, s.z) > boxSize.x * 0.12){
     if (nx < -0.18) return 'trunk_left';
     if (nx > 0.18) return 'trunk_right';
@@ -1002,6 +1018,7 @@ loadGLB('生態箱.glb').then((gltf) => {
   boxSize.set(size.x * s, height, size.z * s);
   tankMeshes = [];
   const partCounts = {};
+  const silverMeshes = [];
   wrap.updateMatrixWorld(true);
   wrap.traverse(o => {
     if (!o.isMesh) return;
@@ -1028,6 +1045,7 @@ loadGLB('生態箱.glb').then((gltf) => {
       o.userData.isTankPart = false;
       o.userData.isFrame = true;
       assignTerrariumPBRMaterial(o, part);
+      silverMeshes.push(o.name || part);
       partCounts[part] = (partCounts[part] || 0) + 1;
       return;
     }
@@ -1037,7 +1055,9 @@ loadGLB('生態箱.glb').then((gltf) => {
     partCounts[part] = (partCounts[part] || 0) + 1;
   });
   window.SKELIO_TANK_PARTS = partCounts;
+  window.SKELIO_SILVER_MESHES = silverMeshes;
   console.log('生態箱部位', partCounts);
+  console.log('拋光銀外殼', silverMeshes);
 
   const front = boxSize.z * 0.5;
   coverPos.set(0, boxSize.y * 0.5, front + boxSize.y * 1.65);

@@ -274,7 +274,60 @@ const glass = new THREE.Mesh(
   scGlassMat
 );
 glass.position.y = 0.7;
+glass.name = 'glass';
 scene.add(glass);
+
+function makeScSilverEnv(){
+  const envScene = new THREE.Scene();
+  const envGeo = new THREE.SphereGeometry(10, 32, 16);
+  const cols = [];
+  const pos = envGeo.attributes.position;
+  for (let i = 0; i < pos.count; i++){
+    const t = THREE.MathUtils.clamp((pos.getY(i) / 10) * 0.5 + 0.5, 0, 1);
+    const c = new THREE.Color(0x3a3f44).lerp(new THREE.Color(0xf4f6f8), Math.pow(t, 0.8));
+    cols.push(c.r, c.g, c.b);
+  }
+  envGeo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+  envScene.add(new THREE.Mesh(envGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const rt = pmrem.fromScene(envScene, 0.04);
+  pmrem.dispose();
+  envGeo.dispose();
+  return rt.texture;
+}
+const scSilverMat = new THREE.MeshStandardMaterial({
+  name: 'metal',
+  color: 0xd9dde2,
+  roughness: 0.16,
+  metalness: 1.0,
+  envMap: makeScSilverEnv(),
+  envMapIntensity: 1.0,
+  side: THREE.DoubleSide
+});
+if (canLoadScTex){
+  loadScTex('textures/Metal049A/Metal049A_4K-JPG_Color.jpg', 1.5, true, (tex) => {
+    scSilverMat.map = tex;
+    scSilverMat.needsUpdate = true;
+  });
+  loadScTex('textures/Metal049A/Metal049A_4K-JPG_NormalGL.jpg', 1.5, false, (tex) => {
+    scSilverMat.normalMap = tex;
+    scSilverMat.needsUpdate = true;
+  });
+  loadScTex('textures/Metal049A/Metal049A_4K-JPG_Roughness.jpg', 1.5, false, (tex) => {
+    scSilverMat.roughnessMap = tex;
+    scSilverMat.needsUpdate = true;
+  });
+  loadScTex('textures/Metal049A/Metal049A_4K-JPG_Metalness.jpg', 1.5, false, (tex) => {
+    scSilverMat.metalnessMap = tex;
+    scSilverMat.needsUpdate = true;
+  });
+}
+const glassBottom = glass.position.y - 3.6;
+const standH = 0.46;
+const tankStand = new THREE.Mesh(new THREE.BoxGeometry(14.4, standH, 11.4), scSilverMat);
+tankStand.name = '生態缸底座';
+tankStand.position.y = glassBottom - standH / 2;
+scene.add(tankStand);
 
 const moteGeo = new THREE.BufferGeometry();
 const moteCount = 90;
@@ -305,6 +358,81 @@ const camPos = new THREE.Vector3(0, 0.35, 6.4);
 const camAim = new THREE.Vector3(0, -0.35, 0);
 const introFrom = new THREE.Vector3(0, 1.6, 12);
 const gltfLoader = new THREE.GLTFLoader();
+const silverMeshNames = ['生態缸底座'];
+function shellPartForBox(meshBox, tankBox){
+  const s = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  meshBox.getSize(s);
+  meshBox.getCenter(c);
+  const tankSize = new THREE.Vector3();
+  tankBox.getSize(tankSize);
+  const dims = [s.x, s.y, s.z].sort((a, b) => a - b);
+  const ny = (c.y - tankBox.min.y) / Math.max(tankSize.y, 1e-6);
+  if (meshBox.min.y <= tankBox.min.y + tankSize.y * 0.04 && s.x > tankSize.x * 0.62 && s.z > tankSize.z * 0.62 && s.y < tankSize.y * 0.45) return 'base';
+  const onTop = meshBox.max.y >= tankBox.max.y - tankSize.y * 0.06;
+  const wideCap = s.x > tankSize.x * 0.65 && s.z > tankSize.z * 0.7;
+  const flat = s.y < tankSize.y * 0.14;
+  if ((onTop || ny > 0.88) && wideCap && flat) return 'lid';
+  const slender = dims[0] < tankSize.y * 0.05 && (dims[0] / Math.max(dims[2], 1e-6)) < 0.12 && dims[2] > tankSize.x * 0.3;
+  const margin = 0.03;
+  const onShell = meshBox.min.x <= tankBox.min.x + tankSize.x * margin || meshBox.max.x >= tankBox.max.x - tankSize.x * margin ||
+    meshBox.min.y <= tankBox.min.y + tankSize.y * margin || meshBox.max.y >= tankBox.max.y - tankSize.y * margin ||
+    meshBox.min.z <= tankBox.min.z + tankSize.z * margin || meshBox.max.z >= tankBox.max.z - tankSize.z * margin;
+  if (slender && onShell) return 'frame';
+  return null;
+}
+function panelLikeSc(mesh){
+  const geo = mesh.geometry;
+  if (!geo) return false;
+  if (!geo.boundingBox) geo.computeBoundingBox();
+  if (!geo.boundingBox) return false;
+  const s = new THREE.Vector3();
+  geo.boundingBox.getSize(s);
+  const dims = [s.x, s.y, s.z].sort((a, b) => a - b);
+  return (dims[0] < dims[2] * 0.045 && dims[2] > 0.08) || (dims[0] < 0.012 && dims[1] > 0.15 && dims[2] > 0.15);
+}
+gltfLoader.load('models/' + encodeURIComponent('生態箱.glb'), (gltf) => {
+  if (!gltf || !gltf.scene) return;
+  const obj = gltf.scene;
+  obj.updateMatrixWorld(true);
+  const tankBox = new THREE.Box3().setFromObject(obj);
+  obj.traverse(o => {
+    if (!o.isMesh) return;
+    const meshBox = new THREE.Box3().setFromObject(o);
+    const size = new THREE.Vector3();
+    meshBox.getSize(size);
+    const dims = [size.x, size.y, size.z].sort((a, b) => a - b);
+    const thinRatio = dims[0] / Math.max(dims[2], 1e-6);
+    if (panelLikeSc(o) || thinRatio < 0.045) return;
+    const part = shellPartForBox(meshBox, tankBox);
+    if (part !== 'base' && part !== 'lid' && part !== 'frame') return;
+    o.material = scSilverMat;
+    o.userData.part = part;
+    silverMeshNames.push(o.name || part);
+  });
+  window.SKELIO_SILVER_MESHES = silverMeshNames.slice();
+  console.log('拋光銀外殼', window.SKELIO_SILVER_MESHES);
+  const holder = new THREE.Group();
+  const taken = [];
+  obj.traverse(o => {
+    if (o.isMesh && o.userData.part && (o.userData.part === 'base' || o.userData.part === 'lid' || o.userData.part === 'frame')) taken.push(o);
+  });
+  obj.updateMatrixWorld(true);
+  taken.forEach(o => holder.attach(o));
+  scene.add(holder);
+  const hb = new THREE.Box3().setFromObject(holder);
+  const hc = new THREE.Vector3();
+  const hs = new THREE.Vector3();
+  hb.getCenter(hc);
+  hb.getSize(hs);
+  const targetH = 3.4;
+  const scScale = targetH / (hs.y || 1);
+  holder.scale.setScalar(scScale);
+  holder.position.set(-hc.x * scScale, groundY - hb.min.y * scScale, -2.8 - hc.z * scScale);
+}, undefined, (err) => {
+  console.error('生態箱底座載入失敗', err);
+  window.SKELIO_SILVER_MESHES = silverMeshNames.slice();
+});
 
 function prepareModel(obj){
   const box = new THREE.Box3().setFromObject(obj);
