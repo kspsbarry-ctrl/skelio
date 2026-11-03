@@ -520,7 +520,7 @@ function panelLikeSc(mesh){
   const dims = [s.x, s.y, s.z].sort((a, b) => a - b);
   return (dims[0] < dims[2] * 0.045 && dims[2] > 0.08) || (dims[0] < 0.012 && dims[1] > 0.15 && dims[2] > 0.15);
 }
-gltfLoader.load('models/' + encodeURIComponent('生態箱.glb'), (gltf) => {
+gltfLoader.load('models/' + encodeURIComponent('生態箱.glb') + '?v=2', (gltf) => {
   if (!gltf || !gltf.scene) return;
   const obj = gltf.scene;
   obj.updateMatrixWorld(true);
@@ -593,7 +593,7 @@ function loadModel(spec){
   if (!spec || typeof spec.model !== 'string' || !spec.model){
     return Promise.reject(new Error('缺少模型'));
   }
-  const url = 'models/' + encodeURIComponent(spec.model);
+  const url = 'models/' + encodeURIComponent(spec.model) + '?v=2';
   return new Promise((resolve, reject) => {
     gltfLoader.load(url, (gltf) => {
       try {

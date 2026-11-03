@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500&family=Noto+Serif+TC:wght@500;600&display=swap" rel="stylesheet">
 <script>
-window.SKELIO_TANK_RESPONSE = fetch('models/%E7%94%9F%E6%85%8B%E7%AE%B1.glb', { priority: 'high' });
+window.SKELIO_TANK_RESPONSE = fetch('models/%E7%94%9F%E6%85%8B%E7%AE%B1.glb?v=2', { priority: 'high' });
 window.SKELIO_TANK_RESPONSE.catch(function () {});
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -378,7 +378,7 @@ const dracoLoader = new THREE.DRACOLoader();
 dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
 loader.setDRACOLoader(dracoLoader);
 function fetchModel(file, priority){
-  const url = 'models/' + encodeURIComponent(file);
+  const url = 'models/' + encodeURIComponent(file) + '?v=2';
   const init = {};
   if (priority) init.priority = priority;
   let lastPct = -1;
@@ -456,7 +456,7 @@ function loadGLB(file){
   }
   if (glbCache.has(file)) return glbCache.get(file);
   const job = new Promise((resolve, reject) => {
-    loader.load('models/' + encodeURIComponent(file), resolve, undefined, (err) => {
+    loader.load('models/' + encodeURIComponent(file) + '?v=2', resolve, undefined, (err) => {
       glbCache.delete(file);
       reject(err);
     });
