@@ -29,6 +29,11 @@ window.SKELIO_TANK_RESPONSE.catch(function () {});
     --accent:#8b6229;
     --glass-bg:rgba(252,251,248,0.86);
     --glass-border:rgba(28,27,24,0.12);
+    --frame-top:56px;
+    --frame-right:48px;
+    --frame-bottom:52px;
+    --frame-left:48px;
+    --frame-lip:9px;
   }
   *{ margin:0; padding:0; box-sizing:border-box; }
   html,body{ min-height:100%; background:var(--paper); color:var(--ink); overflow-x:hidden; overflow-y:hidden; scrollbar-width:none; }
@@ -42,8 +47,67 @@ window.SKELIO_TANK_RESPONSE.catch(function () {});
   body.inside .scroll-track{ height:560vh; }
   body.inside canvas{ cursor:grab; }
   body.inside.dragging canvas{ cursor:grabbing; }
+  .view-frame{
+    position:fixed; inset:0; z-index:2; pointer-events:none; overflow:hidden;
+  }
+  .view-mount, .view-lip, .view-bore{ position:absolute; }
+  .view-mount-t{
+    top:0; left:0; right:0; height:var(--frame-top);
+    background:linear-gradient(#f8f7f4, #e6e2da);
+  }
+  .view-mount-b{
+    bottom:0; left:0; right:0; height:var(--frame-bottom);
+    background:linear-gradient(#d8d3ca, #f4f2ed);
+  }
+  .view-mount-l{
+    top:0; bottom:0; left:0; width:var(--frame-left);
+    background:linear-gradient(90deg, #f7f6f3, #e4e0d8);
+  }
+  .view-mount-r{
+    top:0; bottom:0; right:0; width:var(--frame-right);
+    background:linear-gradient(90deg, #d4cfc6, #f5f3ee);
+  }
+  .view-lip-t{
+    top:calc(var(--frame-top) - var(--frame-lip));
+    left:calc(var(--frame-left) - var(--frame-lip));
+    right:calc(var(--frame-right) - var(--frame-lip));
+    height:var(--frame-lip);
+    background:linear-gradient(#f7f8f9, #8d939a);
+    clip-path:polygon(0 0, 100% 0, calc(100% - var(--frame-lip)) 100%, var(--frame-lip) 100%);
+  }
+  .view-lip-b{
+    bottom:calc(var(--frame-bottom) - var(--frame-lip));
+    left:calc(var(--frame-left) - var(--frame-lip));
+    right:calc(var(--frame-right) - var(--frame-lip));
+    height:var(--frame-lip);
+    background:linear-gradient(#6e747b, #e7eaee);
+    clip-path:polygon(var(--frame-lip) 0, calc(100% - var(--frame-lip)) 0, 100% 100%, 0 100%);
+  }
+  .view-lip-l{
+    top:calc(var(--frame-top) - var(--frame-lip));
+    bottom:calc(var(--frame-bottom) - var(--frame-lip));
+    left:calc(var(--frame-left) - var(--frame-lip));
+    width:var(--frame-lip);
+    background:linear-gradient(90deg, #f4f6f8, #9aa0a6);
+    clip-path:polygon(0 0, 100% var(--frame-lip), 100% calc(100% - var(--frame-lip)), 0 100%);
+  }
+  .view-lip-r{
+    top:calc(var(--frame-top) - var(--frame-lip));
+    bottom:calc(var(--frame-bottom) - var(--frame-lip));
+    right:calc(var(--frame-right) - var(--frame-lip));
+    width:var(--frame-lip);
+    background:linear-gradient(90deg, #7a8086, #eef1f4);
+    clip-path:polygon(0 var(--frame-lip), 100% 0, 100% 100%, 0 calc(100% - var(--frame-lip)));
+  }
+  .view-bore{
+    top:var(--frame-top); right:var(--frame-right); bottom:var(--frame-bottom); left:var(--frame-left);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.45),
+      inset 0 0 0 1px rgba(28,27,24,0.5),
+      inset 0 22px 36px rgba(28,27,24,0.2);
+  }
   .mark{
-    position:fixed; top:28px; left:36px; z-index:2;
+    position:fixed; top:calc((var(--frame-top) - 14px) / 2); left:calc(var(--frame-left) * 0.42); z-index:2;
     font-family:'Cinzel', serif; font-size:12px; font-weight:500; letter-spacing:.32em;
     color:var(--ink-secondary); pointer-events:none;
   }
@@ -55,7 +119,7 @@ window.SKELIO_TANK_RESPONSE.catch(function () {});
     font-family:'Cinzel', serif; letter-spacing:.36em; cursor:pointer;
   }
   .open{
-    position:fixed; left:50%; bottom:7vh; transform:translateX(-50%);
+    position:fixed; left:50%; bottom:calc(var(--frame-bottom) + 4.5vh); transform:translateX(-50%);
     font-size:12px; opacity:0; pointer-events:none;
     transition:opacity .6s ease;
   }
@@ -70,18 +134,18 @@ window.SKELIO_TANK_RESPONSE.catch(function () {});
   }
   @keyframes drip{ 0%{ top:-100%; } 70%{ top:100%; } 100%{ top:100%; } }
   .back, .reset{
-    position:fixed; top:24px; right:36px; font-size:11px; font-weight:500;
+    position:fixed; top:calc((var(--frame-top) - 28px) / 2); right:calc(var(--frame-right) * 0.4); font-size:11px; font-weight:500;
     padding:6px 12px; border-radius:999px;
     color:var(--ink-secondary); opacity:0;
     pointer-events:none; transition:opacity .45s ease, background .2s ease, color .2s ease;
   }
   .back:hover, .reset:hover{ background:rgba(28,27,24,0.07); color:var(--ink); }
-  .reset{ right:118px; }
+  .reset{ right:calc(var(--frame-right) * 0.4 + 86px); }
   body.inside .back,
   body.inside.focusing .reset{ opacity:1; pointer-events:auto; }
   body.inside .open{ opacity:0; pointer-events:none; }
   .status{
-    position:fixed; left:36px; bottom:28px;
+    position:fixed; left:calc(var(--frame-left) + 16px); bottom:calc(var(--frame-bottom) + 14px);
     font-family:'Cinzel', serif; font-size:11px; letter-spacing:.22em; opacity:0;
     transition:opacity .6s ease; pointer-events:none;
     max-width:min(78vw, 460px); line-height:1.7; color:var(--mute);
@@ -111,7 +175,7 @@ window.SKELIO_TANK_RESPONSE.catch(function () {});
   }
   .focus-name{ display:none; }
   .scroll-hud{
-    position:fixed; left:50%; bottom:26px; transform:translateX(-50%);
+    position:fixed; left:50%; bottom:calc(var(--frame-bottom) + 16px); transform:translateX(-50%);
     z-index:3; display:flex; align-items:center; gap:14px;
     padding:9px 20px; border-radius:999px;
     background:var(--glass-bg); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
@@ -203,20 +267,27 @@ window.SKELIO_TANK_RESPONSE.catch(function () {});
       width:100%; max-width:100%;
       height:100vh; height:100dvh;
     }
+    :root{
+      --frame-top:calc(18px + env(safe-area-inset-top, 0px));
+      --frame-right:calc(12px + env(safe-area-inset-right, 0px));
+      --frame-bottom:calc(16px + env(safe-area-inset-bottom, 0px));
+      --frame-left:calc(12px + env(safe-area-inset-left, 0px));
+      --frame-lip:6px;
+    }
     .mark{
-      top:max(12px, env(safe-area-inset-top, 0px));
-      left:max(16px, env(safe-area-inset-left, 0px));
+      top:calc(var(--frame-top) + 10px);
+      left:calc(var(--frame-left) + 12px);
       font-size:clamp(11px, 3.2vw, 13px);
       letter-spacing:.22em;
     }
     .open{
-      bottom:max(16px, env(safe-area-inset-bottom, 0px));
+      bottom:calc(var(--frame-bottom) + 14px);
       min-width:44px; min-height:44px;
       padding:12px 18px;
       font-size:clamp(12px, 3.4vw, 14px);
     }
     .back, .reset{
-      top:max(8px, env(safe-area-inset-top, 0px));
+      top:calc(var(--frame-top) + 6px);
       left:auto;
       min-width:44px; min-height:44px;
       padding:0 14px;
@@ -224,17 +295,17 @@ window.SKELIO_TANK_RESPONSE.catch(function () {});
       display:inline-flex; align-items:center; justify-content:center;
       white-space:nowrap;
     }
-    .back{ right:max(12px, env(safe-area-inset-right, 0px)); }
-    .reset{ right:max(108px, calc(env(safe-area-inset-right, 0px) + 96px)); }
+    .back{ right:calc(var(--frame-right) + 8px); }
+    .reset{ right:calc(var(--frame-right) + 92px); }
     .status{
-      left:max(16px, env(safe-area-inset-left, 0px));
-      right:max(16px, env(safe-area-inset-right, 0px));
-      bottom:calc(env(safe-area-inset-bottom, 0px) + 118px);
+      left:calc(var(--frame-left) + 12px);
+      right:calc(var(--frame-right) + 12px);
+      bottom:calc(var(--frame-bottom) + 108px);
       max-width:none; text-align:center;
       font-size:clamp(11px, 3vw, 13px);
     }
     body.inside .status{
-      top:calc(env(safe-area-inset-top, 0px) + 108px);
+      top:calc(var(--frame-top) + 96px);
       bottom:auto;
     }
     .status.is-loading::before{
@@ -249,9 +320,9 @@ window.SKELIO_TANK_RESPONSE.catch(function () {});
     }
     .status.is-tank.is-loading::before{ content:none; display:none; }
     .scroll-hud{
-      left:max(12px, env(safe-area-inset-left, 0px));
-      right:max(12px, env(safe-area-inset-right, 0px));
-      top:calc(env(safe-area-inset-top, 0px) + 56px);
+      left:calc(var(--frame-left) + 8px);
+      right:calc(var(--frame-right) + 8px);
+      top:calc(var(--frame-top) + 52px);
       bottom:auto; transform:none; width:auto;
       gap:8px; padding:8px 12px;
       font-size:10px; letter-spacing:.1em;
@@ -262,10 +333,10 @@ window.SKELIO_TANK_RESPONSE.catch(function () {});
       overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:42vw;
     }
     .specimen-card{
-      left:max(10px, env(safe-area-inset-left, 0px));
-      right:max(10px, env(safe-area-inset-right, 0px));
+      left:calc(var(--frame-left) + 8px);
+      right:calc(var(--frame-right) + 8px);
       top:auto;
-      bottom:max(8px, env(safe-area-inset-bottom, 0px));
+      bottom:calc(var(--frame-bottom) + 8px);
       width:auto;
       max-height:min(46dvh, 420px);
       overflow:auto;
@@ -284,6 +355,17 @@ window.SKELIO_TANK_RESPONSE.catch(function () {});
 </style>
 </head>
 <body>
+<div class="view-frame" aria-hidden="true">
+  <span class="view-mount view-mount-l"></span>
+  <span class="view-mount view-mount-r"></span>
+  <span class="view-mount view-mount-t"></span>
+  <span class="view-mount view-mount-b"></span>
+  <span class="view-lip view-lip-l"></span>
+  <span class="view-lip view-lip-r"></span>
+  <span class="view-lip view-lip-t"></span>
+  <span class="view-lip view-lip-b"></span>
+  <span class="view-bore"></span>
+</div>
 <div class="hud">
   <div class="mark">SKELIO</div>
   <button class="open" id="open" type="button">OPEN<span></span></button>
