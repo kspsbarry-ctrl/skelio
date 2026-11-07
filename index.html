@@ -38,7 +38,8 @@ window.SKELIO_TANK_RESPONSE.catch(function () {});
   *{ margin:0; padding:0; box-sizing:border-box; }
   html,body{ min-height:100%; background:var(--paper); color:var(--ink); overflow-x:hidden; overflow-y:hidden; scrollbar-width:none; }
   html::-webkit-scrollbar, body::-webkit-scrollbar{ display:none; }
-  body.inside{ overflow-y:auto; }
+  html.inside{ overflow-y:auto; }
+  html.inside body{ overflow-y:visible; }
   body{ font-family:'Noto Serif TC', serif; }
   canvas{ position:fixed; inset:0; z-index:1; display:block; cursor:pointer; touch-action:none; width:100%; height:100%; max-width:100%; }
   .scroll-track{
@@ -1723,8 +1724,12 @@ function openBox(){
   if (phase !== 'cover' || !tankReady) return;
   phase = 'entering';
   enterStart = performance.now();
+  document.documentElement.classList.add('inside');
   document.body.classList.add('inside');
-  if (window.ScrollTrigger) setTimeout(() => ScrollTrigger.refresh(), 60);
+  setTimeout(() => {
+    if (window.ScrollTrigger) ScrollTrigger.refresh();
+    if (lenis && typeof lenis.resize === 'function') lenis.resize();
+  }, 60);
   if (insectGroups.length){
     insectGroups.forEach(g => { g.visible = true; });
   } else {
@@ -1738,9 +1743,11 @@ function leaveBox(){
   if (cardEl) cardEl.classList.remove('visible');
   phase = 'leaving';
   leaveStart = performance.now();
-  document.body.classList.remove('inside');
   if (lenis) lenis.scrollTo(0, { immediate: true });
   else window.scrollTo(0, 0);
+  document.documentElement.classList.remove('inside');
+  document.body.classList.remove('inside');
+  if (lenis && typeof lenis.resize === 'function') lenis.resize();
   insectGroups.forEach(g => { g.visible = false; });
 }
 
