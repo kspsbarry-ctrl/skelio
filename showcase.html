@@ -67,6 +67,21 @@
     transition:opacity .8s ease, color .3s ease;
     max-width:min(86vw, 520px); text-align:center; line-height:1.6;
   }
+  .protocol-note{
+    position:fixed; top:calc(env(safe-area-inset-top, 0px) + 18px); left:50%; transform:translateX(-50%);
+    z-index:4; max-width:min(86vw, 480px); text-align:center;
+    font-family:'Noto Serif TC', serif; font-size:13px; line-height:1.5; color:var(--stone);
+  }
+  .protocol-note[hidden]{ display:none; }
+  .hint .retry{
+    display:block; margin:10px auto 0; min-height:36px; padding:6px 16px;
+    border:1px solid rgba(231,226,216,0.35); border-radius:999px;
+    background:rgba(12,11,8,0.72); color:var(--stone);
+    font-family:'Noto Serif TC', serif; font-size:14px; letter-spacing:0; cursor:pointer;
+    pointer-events:auto;
+  }
+  .hint .retry[hidden]{ display:none; }
+  .hint .retry:disabled{ opacity:0.55; cursor:default; }
   @keyframes skelio-spin{ to{ transform:rotate(360deg); } }
   @media (prefers-reduced-motion: reduce){
     .hint.is-loading span::before{ animation:none; }
@@ -142,6 +157,8 @@
       max-width:calc(100% - 24px);
       font-size:clamp(10px, 2.8vw, 12px);
     }
+    .hint .retry{ min-height:44px; padding:10px 18px; }
+    .protocol-note{ top:calc(env(safe-area-inset-top, 0px) + 12px); }
     .hint.is-loading span::before{
       content:"";
       display:inline-block;
@@ -178,7 +195,8 @@
     <div class="picks" id="dots"></div>
   </div>
 </div>
-<div class="hint is-loading" id="hint"><span>LOADING</span></div>
+<p class="protocol-note" id="protocolNote" hidden>請以 Live Server 開啟，否則無法載入模型</p>
+<div class="hint is-loading" id="hint" role="status" aria-live="polite"><span>LOADING</span><button class="retry" id="retryLoad" type="button" hidden aria-label="重試載入模型">重試</button></div>
 <script src="specimens.js"></script>
 <script>
 const hintEl = document.getElementById('hint');
@@ -193,6 +211,22 @@ function showHint(text, strong){
 }
 function loadFailText(){
   return location.protocol === 'file:' ? '載入失敗 · 請以 Live Server 開啟' : '載入失敗';
+}
+const retryBtn = document.getElementById('retryLoad');
+let showcaseRetry = '';
+function hideShowcaseRetry(){
+  showcaseRetry = '';
+  if (!retryBtn) return;
+  retryBtn.hidden = true;
+  retryBtn.disabled = false;
+  retryBtn.setAttribute('aria-disabled', 'false');
+}
+function showShowcaseRetry(mode){
+  showcaseRetry = mode;
+  if (!retryBtn) return;
+  retryBtn.hidden = false;
+  retryBtn.disabled = false;
+  retryBtn.setAttribute('aria-disabled', 'false');
 }
 function boot(){
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -520,8 +554,23 @@ function panelLikeSc(mesh){
   const dims = [s.x, s.y, s.z].sort((a, b) => a - b);
   return (dims[0] < dims[2] * 0.045 && dims[2] > 0.08) || (dims[0] < 0.012 && dims[1] > 0.15 && dims[2] > 0.15);
 }
-gltfLoader.load('models/' + encodeURIComponent('生態箱.glb') + '?v=2', (gltf) => {
-  if (!gltf || !gltf.scene) return;
+let standGeneration = 0;
+let standInflight = null;
+let standReady = false;
+let standFailed = false;
+function requestStand(){
+  if (standInflight) return standInflight;
+  if (standReady) return Promise.resolve();
+  const generation = ++standGeneration;
+  const standUrl = 'models/' + encodeURIComponent('生態箱.glb') + '?v=2';
+  const job = new Promise((resolve, reject) => {
+    gltfLoader.load(standUrl, resolve, undefined, (err) => {
+      if (THREE.Cache && typeof THREE.Cache.remove === 'function') THREE.Cache.remove(standUrl);
+      reject(err);
+    });
+  }).then((gltf) => {
+    if (generation !== standGeneration || standReady) return;
+    if (!gltf || !gltf.scene) throw new Error('模型是空的');
   const obj = gltf.scene;
   obj.updateMatrixWorld(true);
   const tankBox = new THREE.Box3().setFromObject(obj);
@@ -558,10 +607,30 @@ gltfLoader.load('models/' + encodeURIComponent('生態箱.glb') + '?v=2', (gltf)
   const scScale = targetH / (hs.y || 1);
   holder.scale.setScalar(scScale);
   holder.position.set(-hc.x * scScale, groundY - hb.min.y * scScale, -2.8 - hc.z * scScale);
-}, undefined, (err) => {
-  console.error('生態箱底座載入失敗', err);
-  window.SKELIO_SILVER_MESHES = silverMeshNames.slice();
-});
+    standReady = true;
+    standFailed = false;
+    if (showcaseRetry === 'stand'){
+      hideShowcaseRetry();
+      if (failedIndex !== active && insects[active]) showHint('DRAG  ·  SCROLL', false);
+    }
+  }).catch((err) => {
+    if (generation !== standGeneration) return;
+    console.error('生態箱底座載入失敗', err);
+    window.SKELIO_SILVER_MESHES = silverMeshNames.slice();
+    standFailed = true;
+    if (showcaseRetry === 'specimen' || failedIndex === active) return;
+    if (inflight[active] && !insects[active]) return;
+    showHint(loadFailText(), true);
+    showShowcaseRetry('stand');
+  });
+  standInflight = job;
+  const clearStand = () => {
+    if (standInflight === job) standInflight = null;
+  };
+  job.then(clearStand, clearStand);
+  return job;
+}
+requestStand();
 
 function prepareModel(obj){
   const box = new THREE.Box3().setFromObject(obj);
@@ -589,6 +658,10 @@ function prepareModel(obj){
   return group;
 }
 
+function forgetShowcaseModel(file){
+  if (!file || !THREE.Cache || typeof THREE.Cache.remove !== 'function') return;
+  THREE.Cache.remove('models/' + encodeURIComponent(file) + '?v=2');
+}
 function loadModel(spec){
   if (!spec || typeof spec.model !== 'string' || !spec.model){
     return Promise.reject(new Error('缺少模型'));
@@ -602,7 +675,10 @@ function loadModel(spec){
       } catch (err) {
         reject(err);
       }
-    }, undefined, reject);
+    }, undefined, (err) => {
+      forgetShowcaseModel(spec.model);
+      reject(err);
+    });
   });
 }
 
@@ -629,6 +705,7 @@ function seat(group){
 
 const inflight = new Array(N);
 let focusGeneration = 0;
+let failedIndex = -1;
 function ensure(i, quiet){
   if (insects[i]) return Promise.resolve(insects[i]);
   if (inflight[i]) return inflight[i];
@@ -676,20 +753,64 @@ function focusIndex(i, unknown){
   mode = 'inspect';
   updateHUD(index);
   showOnly(index);
+  failedIndex = -1;
+  if (showcaseRetry === 'specimen') hideShowcaseRetry();
   return ensure(index).then(() => {
     if (generation !== focusGeneration || active !== index) return;
     showOnly(index);
+    failedIndex = -1;
     if (unknown) showHint('找不到此標本', true);
-    else showHint('DRAG  ·  SCROLL', false);
+    else if (standFailed && !standReady){
+      showHint(loadFailText(), true);
+      showShowcaseRetry('stand');
+    } else {
+      showHint('DRAG  ·  SCROLL', false);
+      if (showcaseRetry === 'specimen' || showcaseRetry === 'stand') hideShowcaseRetry();
+    }
     specimens.forEach((_, k) => {
       if (k !== index) ensure(k, true).catch(err => console.error('預載失敗', err));
     });
   }).catch((err) => {
     if (generation !== focusGeneration || active !== index) return;
     console.error('模型載入失敗', err);
+    failedIndex = index;
     showHint(loadFailText(), true);
+    showShowcaseRetry('specimen');
   });
 }
+function retryShowcaseLoad(){
+  if (retryBtn && retryBtn.disabled) return;
+  if ((showcaseRetry === 'specimen' || failedIndex === active) && specimens[active]){
+    if (inflight[active]){
+      retryBtn.disabled = true;
+      retryBtn.setAttribute('aria-disabled', 'true');
+      return;
+    }
+    forgetShowcaseModel(specimens[active].model);
+    if (retryBtn){
+      retryBtn.disabled = true;
+      retryBtn.setAttribute('aria-disabled', 'true');
+    }
+    focusIndex(active);
+    return;
+  }
+  if (standFailed && !standReady){
+    if (standInflight){
+      if (retryBtn){
+        retryBtn.disabled = true;
+        retryBtn.setAttribute('aria-disabled', 'true');
+      }
+      return;
+    }
+    forgetShowcaseModel('生態箱.glb');
+    if (retryBtn){
+      retryBtn.disabled = true;
+      retryBtn.setAttribute('aria-disabled', 'true');
+    }
+    requestStand();
+  }
+}
+if (retryBtn) retryBtn.addEventListener('click', retryShowcaseLoad);
 
 function specimenKey(){
   let key = '';
@@ -843,7 +964,10 @@ if (!window.THREE || !THREE.GLTFLoader || !THREE.WebGLRenderer){
 } else if (!window.SKELIO || !Array.isArray(SKELIO.tank)){
   showHint('標本資料載入失敗', true);
 } else {
-  if (location.protocol === 'file:') showHint('請以 Live Server 開啟，否則無法載入模型', true);
+  if (location.protocol === 'file:'){
+    const note = document.getElementById('protocolNote');
+    if (note) note.hidden = false;
+  }
   boot();
 }
 </script>

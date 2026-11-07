@@ -152,6 +152,22 @@ window.SKELIO_TANK_RESPONSE.catch(function () {});
     max-width:min(78vw, 460px); line-height:1.7; color:var(--mute);
   }
   .status.on{ opacity:1; }
+  .status.is-error{ opacity:1; }
+  .protocol-note{
+    position:fixed; left:calc(var(--frame-left) + 16px); bottom:calc(var(--frame-bottom) + 86px);
+    z-index:4; max-width:min(78vw, 420px);
+    font-family:'Noto Serif TC', serif; font-size:13px; line-height:1.5; color:var(--ink);
+  }
+  .protocol-note[hidden]{ display:none; }
+  .retry{
+    position:fixed; left:calc(var(--frame-left) + 16px); bottom:calc(var(--frame-bottom) + 46px);
+    z-index:4; min-height:36px; padding:6px 14px;
+    border:1px solid rgba(28,27,24,0.28); border-radius:999px; background:var(--paper);
+    color:var(--ink); font-family:'Noto Serif TC', serif; font-size:14px; line-height:1;
+    pointer-events:auto; cursor:pointer;
+  }
+  .retry[hidden]{ display:none; }
+  .retry:disabled{ opacity:0.55; cursor:default; }
   .status.is-tank{
     left:50%; right:auto; top:50%; bottom:auto; width:auto; max-width:none;
     transform:translate(-50%, -50%); text-align:center; letter-spacing:0;
@@ -305,6 +321,19 @@ window.SKELIO_TANK_RESPONSE.catch(function () {});
       max-width:none; text-align:center;
       font-size:clamp(11px, 3vw, 13px);
     }
+    .protocol-note{
+      left:12px; right:12px; bottom:auto; max-width:none; text-align:center;
+      top:calc(var(--frame-top) + 8px);
+    }
+    .retry{
+      left:50%; bottom:calc(var(--frame-bottom) + 156px);
+      transform:translateX(-50%);
+      min-height:44px; padding:0 18px;
+    }
+    body.inside .retry{
+      top:calc(var(--frame-top) + 148px);
+      bottom:auto;
+    }
     body.inside .status{
       top:calc(var(--frame-top) + 96px);
       bottom:auto;
@@ -395,6 +424,8 @@ window.SKELIO_TANK_RESPONSE.catch(function () {});
     <div class="scroll-hud-bar"><div class="scroll-hud-fill" id="scrollHudFill"></div></div>
     <span id="scrollPctLabel">0%</span>
   </div>
+  <p class="protocol-note" id="protocolNote" hidden>請以 Live Server 開啟，否則無法載入模型</p>
+  <button class="retry" id="retryLoad" type="button" hidden aria-label="重試載入模型">重試</button>
   <div class="status" id="status" role="status" aria-live="polite"></div>
 </div>
 <div class="scroll-track" id="scrollTrack" aria-hidden="true"></div>
@@ -425,6 +456,7 @@ function showTankProgress(pct){
 }
 function showStatus(text){
   if (!statusEl) return;
+  statusEl.classList.remove('is-error');
   if (typeof text === 'string' && text.indexOf('LOADING TANK') === 0) {
     const match = text.match(/(\d+)\s*%/);
     showTankProgress(match ? Number(match[1]) : 0);
@@ -434,6 +466,22 @@ function showStatus(text){
   statusEl.textContent = text;
   statusEl.classList.add('on');
   statusEl.classList.toggle('is-loading', typeof text === 'string' && /^(LOADING|DETECTING|VERIFYING)/.test(text));
+}
+const retryBtn = document.getElementById('retryLoad');
+let loadErrorMode = '';
+function hideRetry(){
+  if (!retryBtn) return;
+  retryBtn.hidden = true;
+  retryBtn.disabled = false;
+  retryBtn.setAttribute('aria-disabled', 'false');
+}
+function showLoadError(text){
+  showStatus(text);
+  if (statusEl) statusEl.classList.add('is-error', 'on');
+  if (!retryBtn) return;
+  retryBtn.hidden = false;
+  retryBtn.disabled = false;
+  retryBtn.setAttribute('aria-disabled', 'false');
 }
 function loadFailText(){
   return location.protocol === 'file:' ? '載入失敗 · 請以 Live Server 開啟' : '載入失敗';
@@ -512,7 +560,8 @@ const dracoLoader = new THREE.DRACOLoader();
 dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
 loader.setDRACOLoader(dracoLoader);
 function fetchModel(file, priority){
-  const url = 'models/' + encodeURIComponent(file) + '?v=2';
+  const url = modelUrl(file);
+  const attempt = tankGeneration;
   const init = {};
   if (priority) init.priority = priority;
   let lastPct = -1;
@@ -540,7 +589,7 @@ function fetchModel(file, priority){
       chunks.push(new Uint8Array(value));
       received += value.length;
       const pct = Math.min(99, Math.round(received / total * 100));
-      if (pct !== lastPct) {
+      if (pct !== lastPct && attempt === tankGeneration) {
         lastPct = pct;
         showStatus('LOADING TANK  ' + pct + '%');
       }
@@ -557,12 +606,13 @@ function parseModel(buf){
     loader.parse(buf, 'models/', resolve, (err) => reject(err));
   });
 }
-const tankBytes = fetchModel('生態箱.glb', 'high');
 let boxMesh = null;
 let tankMeshes = [];
 let insectGroups = [];
 let placeGeneration = 0;
 let placeInflight = null;
+let tankGeneration = 0;
+let tankInflight = null;
 let seatCatalog = [];
 let tankReady = false;
 let boxSize = new THREE.Vector3(1, 1, 1);
@@ -586,14 +636,22 @@ const focus = new THREE.Vector3();
 let dragging = false, lastX = 0, lastY = 0, velYaw = 0;
 
 const glbCache = new Map();
+function modelUrl(file){
+  return 'models/' + encodeURIComponent(file) + '?v=2';
+}
+function forgetModel(file){
+  if (!file) return;
+  glbCache.delete(file);
+  if (window.THREE && THREE.Cache && typeof THREE.Cache.remove === 'function') THREE.Cache.remove(modelUrl(file));
+}
 function loadGLB(file){
   if (!file || typeof file !== 'string'){
     return Promise.reject(new Error('缺少模型'));
   }
   if (glbCache.has(file)) return glbCache.get(file);
   const job = new Promise((resolve, reject) => {
-    loader.load('models/' + encodeURIComponent(file) + '?v=2', resolve, undefined, (err) => {
-      glbCache.delete(file);
+    loader.load(modelUrl(file), resolve, undefined, (err) => {
+      forgetModel(file);
       reject(err);
     });
   });
@@ -603,7 +661,7 @@ function loadGLB(file){
 const beetleReady = Promise.all(beetles.map((spec) => loadGLB(spec.model).catch((err) => {
   console.error('預載失敗', spec.model, err);
 })));
-Promise.all([tankBytes.catch(() => {}), beetleReady]).then(releaseTextures, releaseTextures);
+beetleReady.catch(() => {});
 
 function fitCreature(obj, target){
   const box = new THREE.Box3().setFromObject(obj);
@@ -1315,12 +1373,21 @@ function classifyTankPart(mesh){
   return 'detail';
 }
 
-showStatus('LOADING TANK');
-tankBytes.then(parseModel).catch((err) => {
-  console.error('生態箱改由一般方式載入', err);
-  return loadGLB('生態箱.glb');
-}).then((gltf) => {
-  const obj = gltf.scene;
+function beginTank(){
+  if (tankInflight) return tankInflight;
+  const generation = ++tankGeneration;
+  hideRetry();
+  showStatus('LOADING TANK');
+  const bytes = fetchModel('生態箱.glb', 'high');
+  Promise.all([bytes.catch(() => {}), beetleReady]).then(releaseTextures, releaseTextures);
+  const job = bytes.then(parseModel).catch((err) => {
+    if (generation !== tankGeneration) throw err;
+    console.error('生態箱改由一般方式載入', err);
+    forgetModel('生態箱.glb');
+    return loadGLB('生態箱.glb');
+  }).then((gltf) => {
+    if (generation !== tankGeneration || !gltf || boxMesh) return;
+    const obj = gltf.scene;
   obj.traverse(o => {
     if (!o.isMesh) return;
     o.frustumCulled = false;
@@ -1417,17 +1484,31 @@ tankBytes.then(parseModel).catch((err) => {
       showStatus('偵測失敗');
       return;
     }
+    loadErrorMode = '';
+    hideRetry();
     showStatus('READY  ' + seats.length + ' SEATS');
     setTimeout(() => {
-      if (statusEl.textContent.indexOf('READY') === 0) statusEl.classList.remove('on', 'is-loading');
+      if (statusEl && generation === tankGeneration && statusEl.textContent.indexOf('READY') === 0){
+        statusEl.classList.remove('on', 'is-loading');
+      }
     }, 1400);
     const openBtn = document.getElementById('open');
     if (openBtn) openBtn.classList.add('ready');
   });
-}).catch((err) => {
-  console.error('生態箱模型載入失敗', err);
-  showStatus(loadFailText());
-});
+  }).catch((err) => {
+    if (generation !== tankGeneration) return;
+    console.error('生態箱模型載入失敗', err);
+    loadErrorMode = 'tank';
+    showLoadError(loadFailText());
+  });
+  tankInflight = job;
+  const clearTank = () => {
+    if (tankInflight === job) tankInflight = null;
+  };
+  job.then(clearTank, clearTank);
+  return job;
+}
+beginTank();
 
 function insectsOpen(){
   return phase === 'inside' || phase === 'entering';
@@ -1448,8 +1529,14 @@ function syncPlacedInsects(){
     }
   });
 }
-function placeBeetles(){
+function specimenFailText(loaded, total){
+  if (location.protocol === 'file:') return loadFailText();
+  if (loaded > 0 && loaded < total) return '已載入 ' + loaded + ' / ' + total + '，其餘失敗';
+  return '載入失敗';
+}
+function placeBeetles(options){
   if (placeInflight) return placeInflight;
+  const keepExisting = !!(options && options.keepExisting);
   if (!beetles.length){
     showStatus('沒有可放置的模型');
     return Promise.resolve();
@@ -1458,14 +1545,26 @@ function placeBeetles(){
     showStatus('生態箱尚未偵測完成');
     return Promise.resolve();
   }
+  const placedModels = new Set(insectGroups.map((group) => group.userData.spec && group.userData.spec.model).filter(Boolean));
+  const pending = beetles.map((spec, i) => ({ spec: spec, i: i })).filter(({ spec }) => !keepExisting || !placedModels.has(spec.model));
+  if (!pending.length){
+    loadErrorMode = '';
+    hideRetry();
+    if (insectsOpen()) showStatus('ORBIT · ZOOM');
+    return Promise.resolve();
+  }
   const generation = ++placeGeneration;
   const target = boxSize.y * 0.095;
-  showStatus('LOADING  0 / ' + beetles.length);
-  let loaded = 0;
-  insectGroups.forEach(detachInsectGroup);
-  insectGroups = [];
+  hideRetry();
+  showStatus('LOADING  ' + (beetles.length - pending.length) + ' / ' + beetles.length);
+  let loaded = beetles.length - pending.length;
+  if (!keepExisting){
+    insectGroups.forEach(detachInsectGroup);
+    insectGroups = [];
+    placedModels.clear();
+    loaded = 0;
+  }
   const assigned = beetles.map((_, i) => seats[i] || seats[seats.length - 1] || null);
-  const placedModels = new Set();
   const loadOne = (spec, i) => loadGLB(spec.model).then((gltf) => {
     if (generation !== placeGeneration) return;
     if (!gltf || !gltf.scene) throw new Error('模型是空的');
@@ -1499,28 +1598,34 @@ function placeBeetles(){
     if (generation !== placeGeneration) return;
     syncPlacedInsects();
     const failed = results.filter(result => result.status === 'rejected').length;
-    if (!loaded){
-      showStatus(loadFailText());
+    const totalPlaced = insectGroups.length;
+    if (!totalPlaced){
+      loadErrorMode = 'beetles';
+      showLoadError(loadFailText());
       return;
     }
+    if (failed || totalPlaced < beetles.length){
+      loadErrorMode = 'beetles';
+      showLoadError(specimenFailText(totalPlaced, beetles.length));
+      return;
+    }
+    loadErrorMode = '';
+    hideRetry();
     if (!insectsOpen()){
-      if (failed) showStatus('已載入 ' + loaded + ' / ' + beetles.length);
-      else if (statusEl && statusEl.textContent.indexOf('LOADING') === 0){
+      if (statusEl && statusEl.textContent.indexOf('LOADING') === 0){
         statusEl.textContent = 'READY  ' + seats.length + ' SEATS';
-        statusEl.classList.remove('on', 'is-loading');
+        statusEl.classList.remove('on', 'is-loading', 'is-error');
       }
-      return;
-    }
-    if (failed){
-      showStatus('已載入 ' + loaded + ' / ' + beetles.length);
       return;
     }
     showStatus('ORBIT · ZOOM');
     setTimeout(() => {
-      if (statusEl && generation === placeGeneration) statusEl.classList.remove('on', 'is-loading');
+      if (statusEl && generation === placeGeneration && statusEl.textContent.indexOf('ORBIT') === 0){
+        statusEl.classList.remove('on', 'is-loading');
+      }
     }, 1600);
   };
-  const job = Promise.allSettled(beetles.map((spec, i) => loadOne(spec, i))).then(finish);
+  const job = Promise.allSettled(pending.map(({ spec, i }) => loadOne(spec, i))).then(finish);
   placeInflight = job;
   const clearLock = () => {
     if (placeInflight === job) placeInflight = null;
@@ -1528,6 +1633,29 @@ function placeBeetles(){
   job.then(clearLock, clearLock);
   return job;
 }
+function retryFailedLoads(){
+  if (retryBtn && retryBtn.disabled) return;
+  if (loadErrorMode === 'tank' || (!tankReady && loadErrorMode !== 'beetles')){
+    if (tankInflight){
+      if (retryBtn){ retryBtn.disabled = true; retryBtn.setAttribute('aria-disabled', 'true'); }
+      return;
+    }
+    if (retryBtn){ retryBtn.disabled = true; retryBtn.setAttribute('aria-disabled', 'true'); }
+    forgetModel('生態箱.glb');
+    window.SKELIO_TANK_RESPONSE = null;
+    beginTank();
+    return;
+  }
+  if (placeInflight){
+    if (retryBtn){ retryBtn.disabled = true; retryBtn.setAttribute('aria-disabled', 'true'); }
+    return;
+  }
+  if (retryBtn){ retryBtn.disabled = true; retryBtn.setAttribute('aria-disabled', 'true'); }
+  const missing = beetles.filter((spec) => !insectGroups.some((group) => group.userData.spec && group.userData.spec.model === spec.model));
+  missing.forEach((spec) => forgetModel(spec.model));
+  placeBeetles({ keepExisting: insectGroups.length > 0 });
+}
+if (retryBtn) retryBtn.addEventListener('click', retryFailedLoads);
 
 // --- Scroll-Driven Camera Choreography (GSAP ScrollTrigger + Lenis) + Manual Orbit Coexistence ---
 const cameraPath = Array.isArray(SKELIO.cameraPath) && SKELIO.cameraPath.length ? SKELIO.cameraPath : [
@@ -1994,7 +2122,10 @@ function startPage(){
   } else if (!window.SKELIO || !Array.isArray(SKELIO.tank)){
     showStatus('標本資料載入失敗');
   } else {
-    if (location.protocol === 'file:') showStatus('請以 Live Server 開啟，否則無法載入模型');
+    if (location.protocol === 'file:'){
+      const note = document.getElementById('protocolNote');
+      if (note) note.hidden = false;
+    }
     boot();
   }
 }
