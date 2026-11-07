@@ -1822,20 +1822,24 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-// Alt/Ctrl + wheel allows manual radius zoom override; normal wheel drives Lenis + ScrollTrigger camera choreography!
+// Plain wheel scrolls the camera path through Lenis. Alt, Ctrl, or a focused specimen zooms instead.
 renderer.domElement.addEventListener('wheel', (e) => {
   if (phase === 'cover'){
     if (e.deltaY > 8) openBox();
     return;
   }
   if (phase !== 'inside') return;
-  if (e.altKey || e.ctrlKey || focusedInsect){
-    e.preventDefault();
-    const line = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1;
-    const step = Math.max(-0.55, Math.min(0.55, e.deltaY * line * 0.0045));
-    userRadiusOffset += step;
-    targetRadius = Math.max(radiusMin, Math.min(radiusMax, targetRadius + step));
+  if (!(e.altKey || e.ctrlKey || focusedInsect)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (lenis && typeof lenis.scrollTo === 'function') {
+    const locked = Math.round(typeof lenis.scroll === 'number' ? lenis.scroll : window.scrollY);
+    lenis.scrollTo(locked, { immediate: true });
   }
+  const line = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1;
+  const step = Math.max(-0.55, Math.min(0.55, e.deltaY * line * 0.0045));
+  userRadiusOffset += step;
+  targetRadius = Math.max(radiusMin, Math.min(radiusMax, targetRadius + step));
 }, { passive: false });
 
 const camNow = new THREE.Vector3();
