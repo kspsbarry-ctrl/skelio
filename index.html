@@ -1514,6 +1514,102 @@ function sampleCameraPath(p){
 const scrollHudFill = document.getElementById('scrollHudFill');
 const scrollPctLabel = document.getElementById('scrollPctLabel');
 const scrollStageLabel = document.getElementById('scrollStageLabel');
+const frameFitCam = new THREE.PerspectiveCamera(42, 1, 0.2, 100);
+const frameFitPoint = new THREE.Vector3();
+const frameAim = new THREE.Vector3();
+
+function viewBoreNdc(){
+  const w = Math.max(1, innerWidth);
+  const h = Math.max(1, innerHeight);
+  const rectOf = (sel) => {
+    const el = document.querySelector(sel);
+    return el ? el.getBoundingClientRect() : null;
+  };
+  const top = rectOf('.view-mount-t');
+  const bottom = rectOf('.view-mount-b');
+  const left = rectOf('.view-mount-l');
+  const right = rectOf('.view-mount-r');
+  const padX = (14 / w) * 2;
+  const padY = (14 / h) * 2;
+  return {
+    minX: ((left ? left.width : 0) / w) * 2 - 1 + padX,
+    maxX: ((w - (right ? right.width : 0)) / w) * 2 - 1 - padX,
+    maxY: 1 - ((top ? top.height : 0) / h) * 2 - padY,
+    minY: 1 - ((h - (bottom ? bottom.height : 0)) / h) * 2 + padY
+  };
+}
+
+function tankInsideBore(yaw, pitch, aim, radius, bore){
+  if (!(boxSize.y > 0) || !boxMesh) return true;
+  const cy = Math.cos(pitch);
+  frameFitCam.fov = camera.fov;
+  frameFitCam.aspect = camera.aspect || (innerWidth / Math.max(innerHeight, 1));
+  frameFitCam.position.set(
+    aim.x + Math.sin(yaw) * cy * radius,
+    aim.y + Math.sin(pitch) * radius,
+    aim.z + Math.cos(yaw) * cy * radius
+  );
+  frameFitCam.lookAt(aim);
+  frameFitCam.updateProjectionMatrix();
+  frameFitCam.updateMatrixWorld(true);
+  const hx = boxSize.x * 0.5;
+  const hz = boxSize.z * 0.5;
+  const hy = boxSize.y * 0.5;
+  const rot = boxMesh.rotation.y;
+  const c = Math.cos(rot);
+  const s = Math.sin(rot);
+  const xs = [-hx, hx];
+  const ys = [-hy, hy];
+  const zs = [-hz, hz];
+  for (let ix = 0; ix < 2; ix++){
+    for (let iy = 0; iy < 2; iy++){
+      for (let iz = 0; iz < 2; iz++){
+        const lx = xs[ix];
+        const lz = zs[iz];
+        frameFitPoint.set(
+          boxMesh.position.x + lx * c + lz * s,
+          boxMesh.position.y + ys[iy],
+          boxMesh.position.z - lx * s + lz * c
+        );
+        frameFitPoint.project(frameFitCam);
+        if (frameFitPoint.z < -1 || frameFitPoint.z > 1) return false;
+        if (frameFitPoint.x < bore.minX || frameFitPoint.x > bore.maxX) return false;
+        if (frameFitPoint.y < bore.minY || frameFitPoint.y > bore.maxY) return false;
+      }
+    }
+  }
+  return true;
+}
+
+function radiusInsideFrame(yaw, pitch, aim, requested){
+  const bore = viewBoreNdc();
+  if (tankInsideBore(yaw, pitch, aim, requested, bore)) return requested;
+  let lo = requested;
+  let hi = Math.max(requested * 8, boxSize.y * 12, 48);
+  if (!tankInsideBore(yaw, pitch, aim, hi, bore)) return hi;
+  for (let i = 0; i < 18; i++){
+    const mid = (lo + hi) * 0.5;
+    if (tankInsideBore(yaw, pitch, aim, mid, bore)) hi = mid;
+    else lo = mid;
+  }
+  return hi;
+}
+
+function aimForSample(sample){
+  frameAim.set(
+    homeFocus.x,
+    homeFocus.y + sample.heightOffset * boxSize.y,
+    homeFocus.z
+  );
+  return frameAim;
+}
+
+function applyFramedRadius(yaw, pitch, aim, pathRadius){
+  const framed = radiusInsideFrame(yaw, pitch, aim, Math.max(pathRadius, radiusMin));
+  const wanted = framed + userRadiusOffset;
+  const cap = Math.max(radiusMax, framed) + Math.max(0, userRadiusOffset);
+  targetRadius = Math.max(radiusMin, Math.min(cap, wanted));
+}
 
 function applyScrollChoreography(p){
   scrollProgress = Math.max(0, Math.min(1, p));
@@ -1525,13 +1621,9 @@ function applyScrollChoreography(p){
   if (phase !== 'inside' || focusedInsect) return;
   targetOrbitYaw = baseHomeYaw + sample.yaw + userYawOffset;
   targetOrbitPitch = Math.max(-0.12, Math.min(1.28, sample.pitch + userPitchOffset));
-  const pathRadius = homeRadius * sample.radiusRatio + userRadiusOffset;
-  targetRadius = Math.max(radiusMin, Math.min(radiusMax, pathRadius));
-  focus.set(
-    homeFocus.x,
-    homeFocus.y + sample.heightOffset * boxSize.y,
-    homeFocus.z
-  );
+  aimForSample(sample);
+  focus.copy(frameAim);
+  applyFramedRadius(targetOrbitYaw, targetOrbitPitch, frameAim, homeRadius * sample.radiusRatio);
 }
 
 function initScrollChoreography(){
@@ -1796,6 +1888,10 @@ renderer.domElement.addEventListener('pointermove', (e) => {
   targetOrbitYaw += yawStep;
   targetOrbitPitch = Math.max(-0.12, Math.min(1.28, targetOrbitPitch + pitchStep));
   velYaw = yawStep;
+  if (phase === 'inside' && !focusedInsect && boxMesh){
+    const sample = sampleCameraPath(scrollProgress);
+    applyFramedRadius(targetOrbitYaw, targetOrbitPitch, aimForSample(sample), homeRadius * sample.radiusRatio);
+  }
 });
 function endDrag(e){
   if (dragging && !dragMoved && phase === 'inside'){
@@ -1827,7 +1923,12 @@ renderer.domElement.addEventListener('wheel', (e) => {
     const line = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1;
     const step = Math.max(-0.55, Math.min(0.55, e.deltaY * line * 0.0045));
     userRadiusOffset += step;
-    targetRadius = Math.max(radiusMin, Math.min(radiusMax, targetRadius + step));
+    if (focusedInsect){
+      targetRadius = Math.max(radiusMin, Math.min(radiusMax, targetRadius + step));
+    } else if (boxMesh){
+      const sample = sampleCameraPath(scrollProgress);
+      applyFramedRadius(targetOrbitYaw, targetOrbitPitch, aimForSample(sample), homeRadius * sample.radiusRatio);
+    }
   }
 }, { passive: false });
 
@@ -1921,7 +2022,10 @@ function tick(now){
 }
 tick(t0);
 
-window.addEventListener('resize', fitRenderer);
+window.addEventListener('resize', () => {
+  fitRenderer();
+  if (phase === 'inside') applyScrollChoreography(scrollProgress);
+});
 }
 
 function startPage(){
