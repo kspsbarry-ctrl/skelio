@@ -201,6 +201,9 @@
 <script>
 const hintEl = document.getElementById('hint');
 const hintSpan = hintEl ? hintEl.querySelector('span') : null;
+function controlHint(){
+  return '拖曳旋轉 · 滾輪或雙指縮放';
+}
 function showHint(text, strong){
   if (!hintSpan) return;
   hintSpan.textContent = text;
@@ -348,7 +351,7 @@ renderer.domElement.addEventListener('webglcontextlost', (event) => {
 });
 renderer.domElement.addEventListener('webglcontextrestored', () => {
   contextLost = false;
-  if (hintSpan && hintSpan.textContent === '顯示中斷') showHint('DRAG  ·  SCROLL', false);
+  if (hintSpan && hintSpan.textContent === '顯示中斷') showHint(controlHint(), false);
   cancelAnimationFrame(frameId);
   frameId = requestAnimationFrame(tick);
 });
@@ -611,7 +614,7 @@ function requestStand(){
     standFailed = false;
     if (showcaseRetry === 'stand'){
       hideShowcaseRetry();
-      if (failedIndex !== active && insects[active]) showHint('DRAG  ·  SCROLL', false);
+      if (failedIndex !== active && insects[active]) showHint(controlHint(), false);
     }
   }).catch((err) => {
     if (generation !== standGeneration) return;
@@ -764,7 +767,7 @@ function focusIndex(i, unknown){
       showHint(loadFailText(), true);
       showShowcaseRetry('stand');
     } else {
-      showHint('DRAG  ·  SCROLL', false);
+      showHint(controlHint(), false);
       if (showcaseRetry === 'specimen' || showcaseRetry === 'stand') hideShowcaseRetry();
     }
     specimens.forEach((_, k) => {
@@ -840,66 +843,94 @@ let orbitY = 0.35, orbitX = 0.22;
 let targetY = 0.35, targetX = 0.22;
 let velY = 0, velX = 0;
 let dragging = false;
-let moved = false;
 let lastPX = 0, lastPY = 0;
-let gestureDx = 0, gestureDy = 0;
-let orbitAtDownY = 0.35, orbitAtDownX = 0.22;
-let wheelLock = 0;
+const zoomMin = 2.8;
+const zoomMax = 8.8;
+let viewDist = 5.4;
+let targetDist = 5.4;
+const activePointers = new Map();
+let pinchSpan = 0;
+
+function clampZoom(value){
+  return Math.max(zoomMin, Math.min(zoomMax, value));
+}
+function pointerSpan(){
+  const pts = [...activePointers.values()];
+  if (pts.length < 2) return 0;
+  return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+}
+function zoomBy(delta){
+  targetDist = clampZoom(targetDist + delta);
+}
 
 wrap.style.touchAction = 'none';
 wrap.addEventListener('pointerdown', (e) => {
+  activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  try { wrap.setPointerCapture(e.pointerId); } catch (err) {}
+  if (activePointers.size >= 2){
+    dragging = false;
+    pinchSpan = pointerSpan();
+    velY = 0;
+    velX = 0;
+    return;
+  }
   dragging = true;
-  moved = false;
-  gestureDx = 0;
-  gestureDy = 0;
-  orbitAtDownY = targetY;
-  orbitAtDownX = targetX;
   lastPX = e.clientX;
   lastPY = e.clientY;
   velY = 0;
   velX = 0;
-  wrap.setPointerCapture(e.pointerId);
   document.body.classList.add('dragging');
 });
 wrap.addEventListener('pointermove', (e) => {
   pointer.x = (e.clientX / innerWidth) * 2 - 1;
   pointer.y = -(e.clientY / innerHeight) * 2 + 1;
+  if (!activePointers.has(e.pointerId)) return;
+  activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (activePointers.size >= 2){
+    const next = pointerSpan();
+    if (pinchSpan > 8 && next > 8){
+      targetDist = clampZoom(targetDist * (pinchSpan / next));
+      pinchSpan = next;
+    }
+    return;
+  }
   if (!dragging) return;
   const dx = e.clientX - lastPX;
   const dy = e.clientY - lastPY;
-  if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
   lastPX = e.clientX;
   lastPY = e.clientY;
-  gestureDx += dx;
-  gestureDy += dy;
-  if (mobileLayout() && Math.abs(gestureDx) > Math.abs(gestureDy)){
-    targetY = orbitAtDownY;
-    targetX = orbitAtDownX;
-    velY = 0;
-    velX = 0;
-    return;
-  }
   targetY += dx * 0.005;
   targetX = Math.max(-0.15, Math.min(0.7, targetX + dy * 0.003));
   velY = dx * 0.005;
   velX = dy * 0.003;
 });
-function endDrag(){
-  if (mobileLayout() && moved && Math.abs(gestureDx) > 48 && Math.abs(gestureDx) > Math.abs(gestureDy)){
-    focusIndex(active + (gestureDx < 0 ? 1 : -1));
+function endPointer(e){
+  activePointers.delete(e.pointerId);
+  if (activePointers.size >= 2){
+    pinchSpan = pointerSpan();
+    return;
+  }
+  pinchSpan = 0;
+  if (activePointers.size === 1){
+    const rest = [...activePointers.values()][0];
+    dragging = true;
+    lastPX = rest.x;
+    lastPY = rest.y;
+    velY = 0;
+    velX = 0;
+    return;
   }
   dragging = false;
   document.body.classList.remove('dragging');
 }
-wrap.addEventListener('pointerup', endDrag);
-wrap.addEventListener('pointercancel', endDrag);
+wrap.addEventListener('pointerup', endPointer);
+wrap.addEventListener('pointercancel', endPointer);
 
 window.addEventListener('wheel', (e) => {
   e.preventDefault();
-  if (performance.now() < wheelLock) return;
-  if (Math.abs(e.deltaY) < 12) return;
-  wheelLock = performance.now() + 700;
-  focusIndex(active + (e.deltaY > 0 ? 1 : -1));
+  const line = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1;
+  const step = Math.max(-0.72, Math.min(0.72, e.deltaY * line * 0.0035));
+  if (step) zoomBy(step);
 }, { passive:false });
 
 window.addEventListener('keydown', (e) => {
@@ -934,7 +965,8 @@ function tick(now){
   }
   motes.geometry.attributes.position.needsUpdate = true;
 
-  const dist = 5.4;
+  viewDist += (targetDist - viewDist) * (reduceMotion ? 1 : 0.14);
+  const dist = viewDist;
   camPos.set(Math.sin(orbitY) * dist, 0.15 + orbitX * 1.6, Math.cos(orbitY) * dist);
   camAim.set(0, -0.45, 0);
 
