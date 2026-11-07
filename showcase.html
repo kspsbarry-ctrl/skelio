@@ -628,10 +628,12 @@ function seat(group){
 }
 
 const inflight = new Array(N);
+let focusGeneration = 0;
 function ensure(i, quiet){
   if (insects[i]) return Promise.resolve(insects[i]);
   if (inflight[i]) return inflight[i];
   const spec = specimens[i];
+  const generation = focusGeneration;
   if (!quiet) showHint('LOADING', false);
   const job = loadModel(spec).then(group => {
     if (insects[i]) return insects[i];
@@ -639,12 +641,14 @@ function ensure(i, quiet){
     group.rotation.set(pose.x, pose.y, pose.z);
     const restY = seat(group);
     group.userData.index = i;
-    group.visible = i === active;
-    scene.add(group);
+    group.userData.focusGeneration = generation;
+    const current = generation === focusGeneration && i === active;
+    group.visible = current;
+    if (current && !group.parent) scene.add(group);
     insects[i] = { mesh: group, restY, seed: i * 1.7 };
     return insects[i];
   }).catch(err => {
-    inflight[i] = null;
+    if (inflight[i] === job) inflight[i] = null;
     throw err;
   });
   inflight[i] = job;
@@ -652,17 +656,28 @@ function ensure(i, quiet){
 }
 
 function showOnly(i){
-  insects.forEach((it, k) => { if (it) it.mesh.visible = k === i; });
+  insects.forEach((it, k) => {
+    if (!it || !it.mesh) return;
+    const show = k === i;
+    it.mesh.visible = show;
+    if (show){
+      if (!it.mesh.parent) scene.add(it.mesh);
+    } else if (it.mesh.parent === scene){
+      scene.remove(it.mesh);
+    }
+  });
 }
 
 function focusIndex(i, unknown){
   if (!N) return Promise.resolve();
   const index = ((i % N) + N) % N;
+  const generation = ++focusGeneration;
   active = index;
   mode = 'inspect';
   updateHUD(index);
+  showOnly(index);
   return ensure(index).then(() => {
-    if (active !== index) return;
+    if (generation !== focusGeneration || active !== index) return;
     showOnly(index);
     if (unknown) showHint('找不到此標本', true);
     else showHint('DRAG  ·  SCROLL', false);
@@ -670,7 +685,7 @@ function focusIndex(i, unknown){
       if (k !== index) ensure(k, true).catch(err => console.error('預載失敗', err));
     });
   }).catch((err) => {
-    if (active !== index) return;
+    if (generation !== focusGeneration || active !== index) return;
     console.error('模型載入失敗', err);
     showHint(loadFailText(), true);
   });

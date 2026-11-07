@@ -561,6 +561,8 @@ const tankBytes = fetchModel('生態箱.glb', 'high');
 let boxMesh = null;
 let tankMeshes = [];
 let insectGroups = [];
+let placeGeneration = 0;
+let placeInflight = null;
 let seatCatalog = [];
 let tankReady = false;
 let boxSize = new THREE.Vector3(1, 1, 1);
@@ -1427,7 +1429,27 @@ tankBytes.then(parseModel).catch((err) => {
   showStatus(loadFailText());
 });
 
+function insectsOpen(){
+  return phase === 'inside' || phase === 'entering';
+}
+function detachInsectGroup(group){
+  if (!group) return;
+  if (group.parent) group.parent.remove(group);
+  while (group.children.length) group.remove(group.children[0]);
+}
+function syncPlacedInsects(){
+  const show = insectsOpen();
+  insectGroups.forEach((group) => {
+    group.visible = show;
+    if (show){
+      if (!group.parent) scene.add(group);
+    } else if (group.parent){
+      scene.remove(group);
+    }
+  });
+}
 function placeBeetles(){
+  if (placeInflight) return placeInflight;
   if (!beetles.length){
     showStatus('沒有可放置的模型');
     return Promise.resolve();
@@ -1436,31 +1458,57 @@ function placeBeetles(){
     showStatus('生態箱尚未偵測完成');
     return Promise.resolve();
   }
+  const generation = ++placeGeneration;
   const target = boxSize.y * 0.095;
   showStatus('LOADING  0 / ' + beetles.length);
   let loaded = 0;
-  insectGroups.forEach(g => scene.remove(g));
+  insectGroups.forEach(detachInsectGroup);
   insectGroups = [];
   const assigned = beetles.map((_, i) => seats[i] || seats[seats.length - 1] || null);
+  const placedModels = new Set();
   const loadOne = (spec, i) => loadGLB(spec.model).then((gltf) => {
+    if (generation !== placeGeneration) return;
     if (!gltf || !gltf.scene) throw new Error('模型是空的');
+    if (placedModels.has(spec.model) || gltf.scene.parent) return;
     const g = fitCreature(gltf.scene, target);
+    if (generation !== placeGeneration){
+      detachInsectGroup(g);
+      return;
+    }
     g.userData.isInsect = true;
     g.userData.spec = spec;
+    g.userData.placeGeneration = generation;
     g.userData.rawBelly = g.userData.belly;
     const seat = assigned[i];
     if (seat) sitOn(g, seat);
-    scene.add(g);
+    if (generation !== placeGeneration){
+      detachInsectGroup(g);
+      return;
+    }
+    g.visible = insectsOpen();
+    if (g.visible) scene.add(g);
     insectGroups.push(g);
-    showStatus('LOADING  ' + (++loaded) + ' / ' + beetles.length);
+    placedModels.add(spec.model);
+    loaded += 1;
+    showStatus('LOADING  ' + loaded + ' / ' + beetles.length);
   }).catch((err) => {
     console.error('甲蟲模型載入失敗', spec.model, err);
     throw err;
   });
   const finish = (results) => {
+    if (generation !== placeGeneration) return;
+    syncPlacedInsects();
     const failed = results.filter(result => result.status === 'rejected').length;
     if (!loaded){
       showStatus(loadFailText());
+      return;
+    }
+    if (!insectsOpen()){
+      if (failed) showStatus('已載入 ' + loaded + ' / ' + beetles.length);
+      else if (statusEl && statusEl.textContent.indexOf('LOADING') === 0){
+        statusEl.textContent = 'READY  ' + seats.length + ' SEATS';
+        statusEl.classList.remove('on', 'is-loading');
+      }
       return;
     }
     if (failed){
@@ -1468,9 +1516,17 @@ function placeBeetles(){
       return;
     }
     showStatus('ORBIT · ZOOM');
-    setTimeout(() => { if (statusEl) statusEl.classList.remove('on', 'is-loading'); }, 1600);
+    setTimeout(() => {
+      if (statusEl && generation === placeGeneration) statusEl.classList.remove('on', 'is-loading');
+    }, 1600);
   };
-  return Promise.allSettled(beetles.map((spec, i) => loadOne(spec, i))).then(finish);
+  const job = Promise.allSettled(beetles.map((spec, i) => loadOne(spec, i))).then(finish);
+  placeInflight = job;
+  const clearLock = () => {
+    if (placeInflight === job) placeInflight = null;
+  };
+  job.then(clearLock, clearLock);
+  return job;
 }
 
 // --- Scroll-Driven Camera Choreography (GSAP ScrollTrigger + Lenis) + Manual Orbit Coexistence ---
@@ -1730,11 +1786,8 @@ function openBox(){
     if (window.ScrollTrigger) ScrollTrigger.refresh();
     if (lenis && typeof lenis.resize === 'function') lenis.resize();
   }, 60);
-  if (insectGroups.length){
-    insectGroups.forEach(g => { g.visible = true; });
-  } else {
-    placeBeetles();
-  }
+  if (insectGroups.length) syncPlacedInsects();
+  else placeBeetles();
 }
 
 function leaveBox(){
@@ -1748,7 +1801,7 @@ function leaveBox(){
   document.documentElement.classList.remove('inside');
   document.body.classList.remove('inside');
   if (lenis && typeof lenis.resize === 'function') lenis.resize();
-  insectGroups.forEach(g => { g.visible = false; });
+  syncPlacedInsects();
 }
 
 const openButton = document.getElementById('open');
