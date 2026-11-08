@@ -748,13 +748,57 @@ function showOnly(i){
   });
 }
 
-function focusIndex(i, unknown){
+function syncReturnLink(index, unknown){
+  const link = document.querySelector('a.back');
+  if (!link) return;
+  if (unknown){
+    link.href = 'index.html';
+    return;
+  }
+  const spec = specimens[index];
+  const id = spec && (spec.code || spec.name);
+  link.href = id ? 'index.html?view=inside&id=' + encodeURIComponent(id) : 'index.html';
+}
+function syncShowcaseHistory(index, method){
+  const spec = specimens[index];
+  if (!spec || !history || typeof history.pushState !== 'function') return;
+  const id = spec.code || spec.name || '';
+  if (!id) return;
+  const url = new URL('showcase.html?id=' + encodeURIComponent(id), location.href);
+  if (url.pathname === location.pathname && url.search === location.search && !location.hash) return;
+  const state = { id: id };
+  const next = url.pathname + url.search;
+  if (method === 'replace') history.replaceState(state, '', next);
+  else history.pushState(state, '', next);
+}
+function focusFromLocation(source){
+  let key = '';
+  if (source === 'hash'){
+    if (location.hash.length < 2) return;
+    try { key = decodeURIComponent(location.hash.slice(1)); }
+    catch (err) { key = location.hash.slice(1); }
+  } else {
+    key = specimenKey();
+  }
+  if (!key) return;
+  const found = specimens.findIndex(s => s && (s.code === key || s.name === key));
+  if (found < 0) return;
+  focusIndex(found, false, 'history');
+  if (source === 'hash') syncShowcaseHistory(found, 'replace');
+}
+function focusIndex(i, unknown, source){
   if (!N) return Promise.resolve();
   const index = ((i % N) + N) % N;
+  if (source === 'history' && index === active && insects[index]){
+    syncReturnLink(index, false);
+    return Promise.resolve();
+  }
   const generation = ++focusGeneration;
   active = index;
   mode = 'inspect';
   updateHUD(index);
+  syncReturnLink(index, !!unknown);
+  if (source !== 'history' && !unknown) syncShowcaseHistory(index, source === 'init' ? 'replace' : 'push');
   showOnly(index);
   failedIndex = -1;
   if (showcaseRetry === 'specimen') hideShowcaseRetry();
@@ -837,7 +881,9 @@ if (requestKey){
   if (found < 0) unknownSpecimen = true;
   else startIdx = found;
 }
-focusIndex(startIdx, unknownSpecimen);
+focusIndex(startIdx, unknownSpecimen, 'init');
+window.addEventListener('popstate', () => focusFromLocation('pop'));
+window.addEventListener('hashchange', () => focusFromLocation('hash'));
 
 let orbitY = 0.35, orbitX = 0.22;
 let targetY = 0.35, targetX = 0.22;

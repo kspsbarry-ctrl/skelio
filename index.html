@@ -620,6 +620,9 @@ let phase = 'loading';
 let enterStart = 0;
 let leaveStart = 0;
 let focusedInsect = null;
+let routeHandled = false;
+let routeOwnsEnter = false;
+let routeSession = false;
 let dragMoved = false;
 const homeFocus = new THREE.Vector3();
 let homeRadius = 6;
@@ -1494,6 +1497,7 @@ function beginTank(){
     }, 1400);
     const openBtn = document.getElementById('open');
     if (openBtn) openBtn.classList.add('ready');
+    if (generation === tankGeneration) applyTankRoute();
   });
   }).catch((err) => {
     if (generation !== tankGeneration) return;
@@ -1602,11 +1606,13 @@ function placeBeetles(options){
     if (!totalPlaced){
       loadErrorMode = 'beetles';
       showLoadError(loadFailText());
+      applyTankRoute();
       return;
     }
     if (failed || totalPlaced < beetles.length){
       loadErrorMode = 'beetles';
       showLoadError(specimenFailText(totalPlaced, beetles.length));
+      applyTankRoute();
       return;
     }
     loadErrorMode = '';
@@ -1616,9 +1622,11 @@ function placeBeetles(options){
         statusEl.textContent = 'READY  ' + seats.length + ' SEATS';
         statusEl.classList.remove('on', 'is-loading', 'is-error');
       }
+      applyTankRoute();
       return;
     }
     showStatus('ORBIT · ZOOM');
+    applyTankRoute();
     setTimeout(() => {
       if (statusEl && generation === placeGeneration && statusEl.textContent.indexOf('ORBIT') === 0){
         statusEl.classList.remove('on', 'is-loading');
@@ -1889,6 +1897,7 @@ function focusInsect(group){
   box.getSize(size);
   focus.copy(center);
   targetRadius = Math.max(radiusMin, Math.min(radiusMax, Math.max(size.x, size.y, size.z) * 2.8 + boxSize.y * 0.18));
+  rememberFocusedRoute(spec);
 }
 
 function pickInsect(clientX, clientY){
@@ -1904,6 +1913,63 @@ function pickInsect(clientX, clientY){
   return node && node.userData.isInsect ? node : null;
 }
 
+function matchBeetle(id){
+  if (!id) return null;
+  return beetles.find(spec => spec && (spec.code === id || spec.name === id)) || null;
+}
+function queryRoute(){
+  try {
+    const params = new URLSearchParams(location.search);
+    if (params.get('view') !== 'inside') return null;
+    return { inside: true, id: params.get('id') || params.get('code') || '' };
+  } catch (err) {
+    return null;
+  }
+}
+function hashRoute(){
+  if (!location.hash || location.hash.length < 2) return null;
+  let hash = location.hash.slice(1);
+  try { hash = decodeURIComponent(hash); } catch (err) {}
+  if (hash.indexOf('inside/') === 0) return { inside: true, id: hash.slice('inside/'.length) };
+  if (hash.indexOf('inside=') === 0) return { inside: true, id: hash.slice('inside='.length) };
+  if (matchBeetle(hash)) return { inside: true, id: hash };
+  return null;
+}
+function readTankRoute(){
+  return queryRoute() || hashRoute() || { inside: false, id: '' };
+}
+function rememberFocusedRoute(spec){
+  if (!spec || !readTankRoute().inside || !history.replaceState) return;
+  const id = spec.code || spec.name || '';
+  if (!id) return;
+  const next = location.pathname + '?view=inside&id=' + encodeURIComponent(id);
+  if (location.pathname + location.search === next) return;
+  history.replaceState({ view: 'inside', id: id }, '', next);
+}
+function applyTankRoute(){
+  if (routeHandled) return;
+  const route = readTankRoute();
+  if (!route.inside) return;
+  const spec = matchBeetle(route.id);
+  if (!spec){
+    routeHandled = true;
+    return;
+  }
+  if (!tankReady || phase === 'loading' || phase === 'detecting' || phase === 'leaving') return;
+  if (phase === 'cover'){
+    routeSession = true;
+    routeOwnsEnter = true;
+    openBox();
+    return;
+  }
+  if (phase !== 'inside') return;
+  const group = insectGroups.find(g => g.userData && g.userData.spec && (g.userData.spec.code === spec.code || g.userData.spec.model === spec.model));
+  if (!group) return;
+  routeSession = true;
+  routeOwnsEnter = false;
+  routeHandled = true;
+  if (focusedInsect !== group) focusInsect(group);
+}
 function openBox(){
   if (phase !== 'cover' || !tankReady) return;
   phase = 'entering';
@@ -1920,6 +1986,12 @@ function openBox(){
 
 function leaveBox(){
   if (phase !== 'inside' && phase !== 'entering') return;
+  routeSession = false;
+  routeOwnsEnter = false;
+  routeHandled = true;
+  if (readTankRoute().inside && history.replaceState){
+    history.replaceState({ view: 'cover' }, '', location.pathname);
+  }
   clearFocus();
   if (cardEl) cardEl.classList.remove('visible');
   phase = 'leaving';
@@ -1937,6 +2009,36 @@ const backButton = document.getElementById('back');
 const resetButton = document.getElementById('reset');
 if (openButton) openButton.addEventListener('click', openBox);
 if (backButton) backButton.addEventListener('click', leaveBox);
+window.addEventListener('popstate', () => {
+  const route = readTankRoute();
+  if (!route.inside && routeSession && (phase === 'inside' || phase === 'entering')){
+    routeHandled = true;
+    leaveBox();
+    return;
+  }
+  routeHandled = false;
+  applyTankRoute();
+});
+window.addEventListener('hashchange', () => {
+  const hashed = hashRoute();
+  if (!hashed || !hashed.inside) return;
+  const spec = matchBeetle(hashed.id);
+  if (!spec) return;
+  routeHandled = false;
+  const id = spec.code || spec.name;
+  if (history.replaceState){
+    history.replaceState({ view: 'inside', id: id }, '', location.pathname + '?view=inside&id=' + encodeURIComponent(id));
+  }
+  applyTankRoute();
+});
+window.addEventListener('pageshow', () => {
+  const route = readTankRoute();
+  const spec = route.inside ? matchBeetle(route.id) : null;
+  const focusedSpec = focusedInsect && focusedInsect.userData && focusedInsect.userData.spec;
+  const same = spec && focusedSpec && (focusedSpec.code === spec.code || focusedSpec.name === spec.name);
+  if (!same) routeHandled = false;
+  applyTankRoute();
+});
 if (resetButton) resetButton.addEventListener('click', () => {
   if (phase === 'inside'){
     userYawOffset = 0;
@@ -2068,6 +2170,12 @@ function tick(now){
       phase = 'inside';
       if (window.ScrollTrigger) ScrollTrigger.refresh();
       applyScrollChoreography(scrollProgress);
+      if (routeOwnsEnter && !readTankRoute().inside){
+        routeOwnsEnter = false;
+        leaveBox();
+      } else {
+        applyTankRoute();
+      }
     }
   }
   if (phase === 'leaving'){
